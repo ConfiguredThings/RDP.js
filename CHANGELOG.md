@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Increased the size and centred Recursquirrel ([#1](https://github.com/ConfiguredThings/RDP.js/issues/1))
+
 ## [0.1.0] - 2026-04-15
 
 ### Added

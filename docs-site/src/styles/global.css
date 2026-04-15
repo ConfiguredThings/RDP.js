@@ -418,9 +418,10 @@ a:hover { color: var(--color-link-hover); text-decoration: underline; }
 }
 
 .landing-mascot-img {
-  width: 200px;
+  width: 380px;
   height: auto;
   display: block;
+  margin: 0 auto;
   filter: drop-shadow(0 8px 24px rgba(0, 86, 163, 0.18));
   animation: mascot-float 4s ease-in-out infinite;
 }
@@ -435,7 +436,9 @@ a:hover { color: var(--color-link-hover); text-decoration: underline; }
   font-size: 0.82rem;
   color: var(--color-text-muted);
   text-align: center;
-  max-width: 200px;
+  max-width: 380px;
+  margin-left: auto;
+  margin-right: auto;
   line-height: 1.45;
 }
 
