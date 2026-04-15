@@ -68,6 +68,7 @@
   },
   "scripts": {
     "generate:grammars": "node scripts/generate-grammar-index.mjs",
+    "pretest": "npm run generate:grammars",
     "prebuild": "npm run generate:grammars",
     "build": "tsc -p tsconfig.cjs.json && tsc -p tsconfig.esm.json",
     "test": "node --experimental-vm-modules --no-warnings=ExperimentalWarning node_modules/.bin/jest",
