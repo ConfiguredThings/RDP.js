@@ -14,6 +14,13 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Check Unreleased changelog has content
+        run: |
+          if ! awk '/^## \[Unreleased\]/{found=1; next} found && /^## /{exit} found && NF{has_content=1} END{exit !has_content}' CHANGELOG.md; then
+            echo "::error file=CHANGELOG.md::The [Unreleased] section in CHANGELOG.md is empty. Add an entry describing your changes before merging."
+            exit 1
+          fi
+          echo "✓ Unreleased changelog has content"
       - run: npm run lint
       - run: npm test
       - run: npm run build
