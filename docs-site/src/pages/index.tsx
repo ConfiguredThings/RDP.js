@@ -37,8 +37,8 @@ export default function IndexPage() {
           <div className="landing-hero-copy">
             <h1>RDP.js</h1>
             <p className="tagline">
-              A minimal, typed base class for writing recursive descent parsers in TypeScript. Zero
-              dependencies, dual ESM/CJS, with a built-in code generator and parse debugger.
+              Write parsers, not boilerplate. Drop in a grammar, get a fully typed TypeScript parser
+              — zero dependencies, dual ESM/CJS, batteries included.
             </p>
 
             <div className="landing-cta">
@@ -171,12 +171,26 @@ export default function IndexPage() {
   )
 }
 
+const SITE_URL = 'https://configuredthings.github.io/RDP.js'
+const OG_TITLE = 'RDP.js — Write parsers, not boilerplate.'
+const OG_DESC =
+  'Drop in a grammar, get a fully typed TypeScript parser. Zero dependencies, dual ESM/CJS, with a built-in code generator and parse debugger.'
+const OG_IMAGE = `${SITE_URL}/recursquirrel.png`
+
 export const Head: HeadFC = () => (
   <>
-    <title>RDP.js — Recursive Descent Parser Base Class</title>
-    <meta
-      name="description"
-      content="A minimal, typed base class for writing recursive descent parsers in TypeScript. Zero dependencies, dual ESM/CJS, with a built-in code generator and parse debugger."
-    />
+    <title>{OG_TITLE}</title>
+    <meta name="description" content={OG_DESC} />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content={SITE_URL} />
+    <meta property="og:title" content={OG_TITLE} />
+    <meta property="og:description" content={OG_DESC} />
+    <meta property="og:image" content={OG_IMAGE} />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={OG_TITLE} />
+    <meta name="twitter:description" content={OG_DESC} />
+    <meta name="twitter:image" content={OG_IMAGE} />
   </>
 )
