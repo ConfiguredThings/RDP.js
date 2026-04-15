@@ -81,11 +81,10 @@ jobs:
       - name: Pack library
         run: npm pack
 
-      # Requires a paid GitHub plan or public repo — uncomment when available
-      # - name: Attest build provenance
-      #   uses: actions/attest-build-provenance@v2
-      #   with:
-      #     subject-path: '*.tgz'
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: '*.tgz'
 
       - name: Publish to GitHub Packages
         run: npm publish --provenance --access public *.tgz
