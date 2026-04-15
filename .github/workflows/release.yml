@@ -95,7 +95,7 @@ jobs:
       - name: Extract changelog notes
         run: |
           VERSION="${{ steps.version.outputs.version }}"
-          awk "/^## \[$VERSION\]/{found=1; next} found && /^## /{exit} found{print}" CHANGELOG.md \
+          awk "/^## \[$VERSION\]/{found=1; next} found && /^(## |\[)/{exit} found{print}" CHANGELOG.md \
             | sed '/^[[:space:]]*$/d' \
             > release-notes.txt
           echo "Release notes:"
