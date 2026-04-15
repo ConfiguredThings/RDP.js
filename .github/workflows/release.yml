@@ -62,7 +62,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          registry-url: 'https://registry.npmjs.org'
+          registry-url: 'https://npm.pkg.github.com'
 
       - name: Install library dependencies
         run: npm ci
@@ -76,10 +76,10 @@ jobs:
       - name: Generate API docs
         run: npm run docs
 
-      - name: Publish to npm
+      - name: Publish to GitHub Packages
         run: npm publish --provenance --access public
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Extract changelog notes
         run: |
