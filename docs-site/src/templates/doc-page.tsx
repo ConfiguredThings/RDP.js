@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { graphql, Link, withPrefix, type PageProps, type HeadFC } from 'gatsby'
 import { MDXProvider } from '@mdx-js/react'
 import DocsSidebar from '../components/DocsSidebar'
@@ -29,13 +29,24 @@ export default function DocPageTemplate({
 }: PageProps<DataType, PageContext>) {
   const { frontmatter } = data.mdx
   const { prev, next } = pageContext
+  const [sidebarOpen, setSidebarOpen] = useState(false)
 
   return (
     <>
       <SiteHeader />
 
       <div className="page-layout">
-        <DocsSidebar currentSlug={frontmatter.slug} />
+        <button
+          className={`docs-mobile-toggle${sidebarOpen ? ' open' : ''}`}
+          onClick={() => setSidebarOpen((o) => !o)}
+          aria-expanded={sidebarOpen}
+          aria-controls="docs-sidebar"
+        >
+          <span className="docs-mobile-toggle-icon">›</span>
+          Documentation
+        </button>
+
+        <DocsSidebar currentSlug={frontmatter.slug} mobileOpen={sidebarOpen} />
 
         <main className="doc-main">
           <article className="doc-content">

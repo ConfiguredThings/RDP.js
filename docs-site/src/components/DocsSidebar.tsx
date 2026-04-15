@@ -7,9 +7,10 @@ interface SidebarEntry {
 
 interface Props {
   currentSlug: string
+  mobileOpen?: boolean
 }
 
-export default function DocsSidebar({ currentSlug }: Props) {
+export default function DocsSidebar({ currentSlug, mobileOpen = false }: Props) {
   const data = useStaticQuery<{ allMdx: { nodes: SidebarEntry[] } }>(graphql`
     query DocsSidebarQuery {
       allMdx(sort: { frontmatter: { order: ASC } }) {
@@ -27,7 +28,7 @@ export default function DocsSidebar({ currentSlug }: Props) {
   const pages = data.allMdx.nodes
 
   return (
-    <aside className="docs-sidebar">
+    <aside id="docs-sidebar" className={`docs-sidebar${mobileOpen ? ' mobile-open' : ''}`}>
       <div className="docs-sidebar-title">Documentation</div>
       <ul>
         {pages.map(({ frontmatter: { title, slug } }) => (

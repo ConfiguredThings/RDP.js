@@ -61,6 +61,7 @@
 html { font-size: 16px; scroll-behavior: smooth; }
 
 body {
+  margin: 0;
   font-family: var(--font-sans);
   background: var(--color-bg);
   color: var(--color-text);
@@ -212,6 +213,8 @@ a:hover { color: var(--color-link-hover); text-decoration: underline; }
 .doc-content ul,
 .doc-content ol { margin: 0.75rem 0; padding-left: 1.5rem; }
 .doc-content li { margin: 0.3rem 0; }
+
+.doc-content img { max-width: 100%; height: auto; }
 
 .doc-content strong { font-weight: 600; }
 .doc-content em     { font-style: italic; }
@@ -383,9 +386,26 @@ a:hover { color: var(--color-link-hover); text-decoration: underline; }
   align-items: center;
 }
 
+/* Grid items must have min-width: 0 or content (pre, wide SVG) blows out the grid */
+.landing-hero-copy { min-width: 0; }
+.landing-hero-mascot { min-width: 0; }
+
 @media (max-width: 680px) {
-  .landing-hero-inner { grid-template-columns: 1fr; }
-  .landing-hero-mascot { display: none; }
+  .landing-hero-inner { grid-template-columns: 1fr; gap: 0; }
+  /* Mascot below the copy: centred, modest size */
+  .landing-hero-mascot {
+    text-align: center;
+    margin-top: 1.75rem;
+    padding-bottom: 0;
+  }
+  .landing-mascot-img { width: 140px; max-width: 100%; }
+  /* Quote: show but compact — no excess margin below */
+  .landing-mascot-quote {
+    font-size: 0.72rem;
+    max-width: 240px;
+    margin-top: 0.5rem;
+    margin-bottom: 0;
+  }
 }
 
 .landing-hero-copy h1 {
@@ -1026,6 +1046,339 @@ a:hover { color: var(--color-link-hover); text-decoration: underline; }
   height: calc(100vh - var(--header-h));
   color: var(--color-text-muted);
   font-size: 0.9rem;
+}
+
+/* ── Hamburger button (hidden on desktop) ─────────────────────────────────── */
+.site-nav-hamburger {
+  display: none;
+  margin-left: auto;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0.5rem;
+  color: var(--color-text);
+  line-height: 0;
+  flex-shrink: 0;
+  /* ensure it's above the nav backdrop */
+  position: relative;
+  z-index: 201;
+}
+
+.hamburger-icon,
+.hamburger-icon::before,
+.hamburger-icon::after {
+  display: block;
+  width: 20px;
+  height: 2px;
+  background: currentColor;
+  border-radius: 2px;
+  transition: transform 0.25s, opacity 0.2s;
+}
+.hamburger-icon { position: relative; }
+.hamburger-icon::before,
+.hamburger-icon::after { content: ''; position: absolute; left: 0; }
+.hamburger-icon::before { top: -6px; }
+.hamburger-icon::after  { top: 6px; }
+.hamburger-icon.open    { background: transparent; }
+.hamburger-icon.open::before { transform: rotate(45deg) translate(4px, 4px); }
+.hamburger-icon.open::after  { transform: rotate(-45deg) translate(4px, -4px); }
+
+/* ── Nav backdrop (hidden on desktop) ────────────────────────────────────── */
+.site-nav-backdrop {
+  display: none;
+}
+
+/* ── CSS-only nav toggle (SiteHeaderBase / static pages) ─────────────────── */
+.site-nav-toggle-cb { display: none; }
+@media (max-width: 767px) {
+  .site-nav-toggle-cb:checked ~ .site-header-inner .site-nav-backdrop {
+    background: rgba(0, 0, 0, 0.45);
+    pointer-events: auto;
+  }
+  .site-nav-toggle-cb:checked ~ .site-header-inner .site-nav {
+    transform: translateX(0);
+  }
+  .site-nav-toggle-cb:checked ~ .site-header-inner .hamburger-icon {
+    background: transparent;
+  }
+  .site-nav-toggle-cb:checked ~ .site-header-inner .hamburger-icon::before {
+    transform: rotate(45deg) translate(4px, 4px);
+  }
+  .site-nav-toggle-cb:checked ~ .site-header-inner .hamburger-icon::after {
+    transform: rotate(-45deg) translate(4px, -4px);
+  }
+}
+
+/* Short phase tab labels: only shown inside the mobile @media block below */
+.tab-label-short { display: none; }
+
+/* ── Mobile docs sidebar toggle button (hidden on desktop) ────────────────── */
+.docs-mobile-toggle {
+  display: none;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background: var(--color-bg-soft);
+  border: none;
+  border-bottom: 1px solid var(--color-border);
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  text-align: left;
+  min-height: 44px;
+}
+.docs-mobile-toggle:hover { color: var(--color-text); }
+.docs-mobile-toggle-icon { font-size: 1.1rem; line-height: 1; transition: transform 0.2s; }
+.docs-mobile-toggle.open .docs-mobile-toggle-icon { transform: rotate(90deg); }
+
+/* ── Responsive: tablet (≤ 900px) — tighten layout ───────────────────────── */
+@media (max-width: 900px) {
+  :root { --sidebar-width: 200px; }
+  .doc-main { padding: 2rem 0 3rem 1.75rem; }
+}
+
+/* ── Responsive: mobile (≤ 767px) ────────────────────────────────────────── */
+@media (max-width: 767px) {
+  /* ── Header ── */
+  .site-header { padding: 0 1rem; }
+  .site-header-inner { gap: 0.5rem; }
+  .site-logo-name { display: none; }
+
+  /* Show hamburger */
+  .site-nav-hamburger {
+    display: flex;
+    align-items: center;
+    height: var(--header-h);
+  }
+
+  /* Backdrop: full-screen dimmer, shown when nav is open */
+  .site-nav-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0);
+    z-index: 199;
+    pointer-events: none;
+    transition: background 0.3s;
+  }
+  .site-nav-backdrop.open {
+    background: rgba(0, 0, 0, 0.45);
+    pointer-events: auto;
+  }
+
+  /* Nav drawer: slides in from the right */
+  .site-nav {
+    position: fixed;
+    top: 0;
+    right: 0;
+    height: 100dvh;
+    width: min(300px, 82vw);
+    background: var(--color-bg);
+    border-left: 1px solid var(--color-border);
+    box-shadow: -6px 0 32px rgba(0, 0, 0, 0.18);
+    flex-direction: column;
+    gap: 0;
+    padding: calc(var(--header-h) + 0.75rem) 1.5rem 2rem;
+    z-index: 200;
+    transform: translateX(100%);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    overflow-y: auto;
+    margin-left: 0;
+    font-size: 1rem;
+  }
+  .site-nav.nav-open {
+    transform: translateX(0);
+  }
+  .site-nav a {
+    padding: 0.85rem 0;
+    border-bottom: 1px solid var(--color-border);
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    font-size: 1rem;
+  }
+  .site-nav a:last-child { border-bottom: none; }
+
+  /* ── Page layout: stack vertically ── */
+  .page-layout {
+    flex-direction: column;
+    padding: 0;
+    min-height: unset;
+  }
+
+  /* ── Docs sidebar: collapsed until toggled ── */
+  .docs-sidebar {
+    width: 100%;
+    position: static;
+    height: auto;
+    max-height: 0;
+    overflow: hidden;
+    border-right: none;
+    border-bottom: 1px solid var(--color-border);
+    padding: 0 1rem;
+    transition: max-height 0.3s ease, padding 0.3s ease;
+  }
+  .docs-sidebar.mobile-open {
+    max-height: 1200px;
+    padding: 1rem;
+  }
+  /* Larger tap targets in sidebar */
+  .docs-sidebar a { min-height: 44px; display: flex; align-items: center; }
+
+  /* ── Show sidebar toggle button ── */
+  .docs-mobile-toggle { display: flex; }
+
+  /* ── Main doc content ── */
+  .doc-main {
+    padding: 1.5rem 1rem 3rem;
+    width: 100%;
+  }
+  .doc-content h1 { font-size: 1.5rem; }
+  .doc-content h2 { font-size: 1.2rem; }
+  .doc-content pre { font-size: 0.8rem; }
+
+  /* The worked-example pre has long lines that inflate the body width, which
+     inflates every width:100% block (including the hero). Clip it at source. */
+  .landing-worked-example { overflow: hidden; padding: 0 1.25rem 3rem; }
+
+  /* Belt-and-braces: no raw pre should ever blow out the page on mobile */
+  pre { max-width: 100%; }
+
+  /* Cap the body to viewport width so inflated children can't widen
+     every width:100% ancestor (including the hero).
+     overflow-x:hidden on html alone only suppresses scroll — it doesn't
+     change the body's computed width. */
+  html, body { overflow-x: hidden; }
+  body { max-width: 100vw; }
+
+  /* ── Landing: smaller type, tighter spacing ── */
+  /* Put padding directly on the section (same pattern as .landing-features).
+     Right padding uses max() to stay 1.25rem from the viewport edge even
+     if the body is inflated wider than 100vw by an overflowing child. */
+  /* Hero: vertical padding only — horizontal spacing via inner margin */
+  .landing-hero { padding: 2.5rem 0 1.25rem; }
+  /* Use margin on the inner div instead of padding on the hero.
+     This works even if hero padding is being suppressed somehow. */
+  .landing-hero-inner {
+    width: auto;
+    max-width: var(--max-width);
+    box-sizing: content-box;
+    margin-left: 1.25rem;
+    margin-right: 1.25rem;
+    padding: 0;
+    overflow: visible;
+  }
+  /* Clip box-shadows at the grid cell so they don't bleed into the right gap */
+  .landing-hero-copy { overflow: hidden; }
+  .landing-hero-copy h1 { font-size: 2rem; }
+  .landing-hero-copy .tagline { font-size: 0.9rem; margin-bottom: 1rem; }
+
+  /* CTA buttons: stack vertically, full-width, easy to tap */
+  .landing-cta {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.6rem;
+    margin-bottom: 1.25rem;
+  }
+  .landing-cta .btn { justify-content: center; }
+
+  /* Quick start: smaller padding and font so code fits comfortably */
+  .landing-quick-start { margin-top: 0; }
+  .landing-quick-start h2 { margin-bottom: 0.4rem; }
+  .landing-quick-start pre {
+    padding: 0.85rem 1rem;
+    font-size: 0.75rem;
+    overflow-x: auto;
+  }
+
+  .landing-features { padding: 1.5rem 1.25rem 2rem; }
+
+  /* ── Prev/next: stack vertically ── */
+  .prev-next { flex-direction: column; gap: 0.75rem; }
+  .prev-next a { max-width: 100%; }
+  .prev-next .next-link { margin-left: 0; text-align: left; }
+
+  /* ── Tables: horizontal scroll ── */
+  .doc-content table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+  /* ── Playground ── */
+  /* Keep fixed height so Monaco's flex:1 fill chain still works */
+  .playground-root {
+    height: calc(100vh - var(--header-h));
+    overflow: hidden;
+  }
+
+  /* Header: wrap to two rows on mobile */
+  .playground-header {
+    height: auto;
+    flex-wrap: wrap;
+    padding: 0.5rem 0.75rem;
+    gap: 0.4rem;
+    row-gap: 0.4rem;
+  }
+  /* Row 1: title + action links */
+  .playground-title { order: 1; }
+  .playground-header-actions { order: 1; margin-left: auto; gap: 0.4rem; }
+  .playground-header-actions .btn-sm { font-size: 0.72rem; padding: 0.3rem 0.6rem; }
+
+  /* Row 2: phase tabs span full width */
+  .playground-phase-tabs {
+    order: 2;
+    width: 100%;
+    margin-left: 0;
+    gap: 0.25rem;
+    flex-wrap: wrap;
+  }
+  .playground-phase-tab { font-size: 0.72rem; height: 28px; padding: 0 0.5rem; gap: 0.3rem; }
+  .playground-phase-step { width: 14px; height: 14px; font-size: 0.6rem; }
+  .playground-phase-arrow { font-size: 0.8rem; }
+
+  /* Short tab labels: show on mobile, hide long ones */
+  .tab-label-full { display: none; }
+  .tab-label-short { display: inline; }
+
+  /* Write phase: grammar section fills all remaining root height via flex:1 */
+  /* (no height override needed — .playground-grammar-fill already has flex:1) */
+
+  /* Grammar toolbar: allow wrapping */
+  .grammar-editor-toolbar { flex-wrap: wrap; row-gap: 0.4rem; }
+  .grammar-toolbar-actions { flex-wrap: wrap; }
+
+  /* Test phase body: column, fills remaining root height, children scroll independently */
+  .playground-body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  /* Left pane: expression + debug + trace — takes 55% of body height */
+  .playground-left {
+    flex: 55;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 0.75rem 1rem 1rem;
+    -webkit-overflow-scrolling: touch;
+  }
+  /* Railroad diagrams — takes 45% of body height, scrolls independently */
+  .playground-diagrams-panel {
+    flex: 45;
+    min-height: 0;
+    overflow-y: auto;
+    border-left: none;
+    border-top: 1px solid var(--color-border);
+    padding: 0.75rem 1rem;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Expression Monaco editor: shorter on mobile */
+  .expr-monaco-wrap { height: 130px; }
+
+  /* Trace log: shorter on mobile */
+  .trace-log-body { height: 110px; }
 }
 
 /* ── 404 ──────────────────────────────────────────────────────────────────── */

@@ -226,7 +226,7 @@
 /* Dark mode overrides */
 @media (prefers-color-scheme: dark) {
     .site-header {
-        background: #1c1c1e;
+        background: #0f1e2e;
         border-bottom-color: #2e3a47;
     }
 
@@ -234,4 +234,126 @@
     .site-logo-name:hover { color: #5ba4e0; }
     .site-nav a { color: #8fa8bf; }
     .site-nav a:hover { color: #5ba4e0; }
+}
+
+/* ── Hamburger button (hidden on desktop) ─────────────────────────────────── */
+.site-nav-hamburger {
+    display: none;
+    margin-left: auto;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0.5rem;
+    color: #5a6c7e;
+    line-height: 0;
+    flex-shrink: 0;
+    position: relative;
+    z-index: 201;
+}
+
+.hamburger-icon,
+.hamburger-icon::before,
+.hamburger-icon::after {
+    display: block;
+    width: 20px;
+    height: 2px;
+    background: currentColor;
+    border-radius: 2px;
+    transition: transform 0.25s, opacity 0.2s;
+}
+.hamburger-icon { position: relative; }
+.hamburger-icon::before,
+.hamburger-icon::after { content: ''; position: absolute; left: 0; }
+.hamburger-icon::before { top: -6px; }
+.hamburger-icon::after  { top: 6px; }
+
+/* ── Nav backdrop (hidden on desktop) ────────────────────────────────────── */
+.site-nav-backdrop { display: none; }
+
+/* ── CSS checkbox hack (used by the injected static header) ──────────────── */
+.site-nav-toggle-cb { display: none; }
+
+@media (max-width: 767px) {
+    .site-nav-toggle-cb:checked ~ .site-header-inner .site-nav-backdrop {
+        background: rgba(0, 0, 0, 0.45);
+        pointer-events: auto;
+    }
+    .site-nav-toggle-cb:checked ~ .site-header-inner .site-nav {
+        transform: translateX(0);
+    }
+    .site-nav-toggle-cb:checked ~ .site-header-inner .hamburger-icon {
+        background: transparent;
+    }
+    .site-nav-toggle-cb:checked ~ .site-header-inner .hamburger-icon::before {
+        transform: rotate(45deg) translate(4px, 4px);
+    }
+    .site-nav-toggle-cb:checked ~ .site-header-inner .hamburger-icon::after {
+        transform: rotate(-45deg) translate(4px, -4px);
+    }
+
+    /* Header */
+    .site-header { padding: 0 1rem; }
+    .site-header-inner { gap: 0.5rem; }
+    .site-logo-name { display: none; }
+
+    /* Show hamburger */
+    .site-nav-hamburger {
+        display: flex;
+        align-items: center;
+        height: 52px;
+    }
+
+    /* Backdrop: full-screen dimmer */
+    .site-nav-backdrop {
+        display: block;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0);
+        z-index: 199;
+        pointer-events: none;
+        transition: background 0.3s;
+    }
+
+    /* Nav drawer: slides in from the right */
+    .site-nav {
+        position: fixed;
+        top: 0;
+        right: 0;
+        height: 100dvh;
+        width: min(300px, 82vw);
+        background: #ffffff;
+        border-left: 1px solid #d0dde9;
+        box-shadow: -6px 0 32px rgba(0, 0, 0, 0.18);
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0;
+        padding: calc(52px + 0.75rem) 1.5rem 2rem;
+        z-index: 200;
+        transform: translateX(100%);
+        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        overflow-y: auto;
+        margin-left: 0;
+    }
+
+    .site-nav a {
+        padding: 0.85rem 0;
+        border-bottom: 1px solid #d0dde9;
+        min-height: 44px;
+        display: flex;
+        align-items: center;
+        font-size: 1rem;
+        text-align: left;
+    }
+    .site-nav a:last-child { border-bottom: none; }
+
+}
+
+@media (max-width: 767px) and (prefers-color-scheme: dark) {
+    .site-nav-hamburger { color: #8fa8bf; }
+
+    .site-nav {
+        background: #0f1e2e;
+        border-left-color: #3a5470;
+    }
+    .site-nav a { border-bottom-color: #3a5470; }
 }

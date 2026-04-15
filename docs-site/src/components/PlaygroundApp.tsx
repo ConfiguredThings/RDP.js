@@ -195,7 +195,8 @@ export default function PlaygroundApp() {
             onClick={() => setPhase('write')}
           >
             <span className="playground-phase-step">1</span>
-            Write grammar &amp; compile parser
+            <span className="tab-label-full">Write grammar &amp; compile parser</span>
+            <span className="tab-label-short">Write grammar</span>
           </button>
           <span className="playground-phase-arrow">›</span>
           <button
@@ -203,10 +204,14 @@ export default function PlaygroundApp() {
             onClick={() => setPhase('test')}
           >
             <span className="playground-phase-step">2</span>
-            Test &amp; debug language
+            <span className="tab-label-full">Test &amp; debug language</span>
+            <span className="tab-label-short">Test &amp; debug</span>
           </button>
         </div>
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+        <div
+          className="playground-header-actions"
+          style={{ marginLeft: 'auto', display: 'flex', gap: '0.75rem', alignItems: 'center' }}
+        >
           <Link to="/docs/tutorial/" className="btn btn-secondary btn-sm">
             Tutorial
           </Link>

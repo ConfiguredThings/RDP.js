@@ -129,6 +129,7 @@ export default function IndexPage() {
 
       {/* ── Worked example teaser ────────────────────────────────────────── */}
       <section
+        className="landing-worked-example"
         style={{
           maxWidth: 'var(--max-width)',
           margin: '0 auto',
