@@ -1,0 +1,59 @@
+@startuml
+skinparam componentStyle rectangle
+skinparam defaultFontName monospace
+skinparam packageStyle rectangle
+skinparam ArrowColor #2d4a70
+skinparam ArrowFontColor #2d4a70
+skinparam ArrowFontSize 10
+skinparam ComponentBorderColor #0056A3
+skinparam ComponentBorderThickness 1.5
+skinparam PackageBorderColor #7aaacc
+skinparam PackageBorderThickness 1.5
+
+top to bottom direction
+
+package "Your code" #eef3fa {
+  component "grammar.ebnf" as grammar
+  component "Generated Parser.ts" as generated #cce8ff
+  component "Hand-crafted parser" as handcrafted
+}
+
+package "Toolchain (build-time)" #c0d8f0 {
+  component "rdp-gen CLI" as rdpgen
+  component "ABNFParser" as abnf
+  component "EBNFParser" as ebnf
+  component "GrammarParser" as grammarparser #gold
+  component "codegen.ts" as codegen
+}
+
+package "Interpreter" #90b8d8 {
+  component "GrammarInterpreter" as interp #gold
+  component "Playground / tooling" as playground
+}
+
+package "Runtime - shared foundation" #4878b0 {
+  component "RDParser" as rdparser #GreenYellow
+  component "ObservableRDParser" as observable
+}
+
+' Toolchain build-time flow
+grammar --> rdpgen
+rdpgen --> abnf
+rdpgen --> ebnf
+abnf --> grammarparser : extends
+ebnf --> grammarparser : extends
+grammarparser --> codegen : AST
+codegen --> generated : emits
+
+' All extends relationships lead to RDParser
+grammarparser --> rdparser : extends
+generated --> rdparser : extends
+handcrafted --> rdparser : extends
+interp --> rdparser : extends
+observable --> rdparser : extends
+
+' Alternative interpreter path (runtime, no code generation)
+grammar ..> interp : runtime path\n(no code generation)
+interp --> playground : drives
+
+@enduml

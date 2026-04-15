@@ -1,0 +1,42 @@
+(* ABNF meta-grammar written in ISO EBNF.
+   Describes the ABNF syntax accepted by rdp-gen.
+
+   Covers: rule definitions (=), alternation (/), double-quoted string literals,
+   zero-or-more {X}, one-or-more 1*X, optional groups [...], and character-value
+   rules (%xNN, %xNN-MM, %xNN.MM, %dNN, %bNN, and their range/concatenation forms).
+
+   Items within a rule are separated by horizontal space only (Hsp); Wsp (which
+   includes newlines) is only used between rules so that each rule is newline-terminated.
+
+   Valid test input: any multi-rule ABNF grammar, e.g.:
+     greeting = "hello"
+     digit    = %x30-39 *)
+
+Grammar  = {Rule};
+Rule     = Wsp, RuleName, Hsp, '=', Hsp, Body;
+Body     = Seq, {Hsp, '/', Hsp, Seq};
+Seq      = Item, {Hsp, Item};
+Item     = Rep, Factor | Factor;
+Rep      = '1', '*' | '*';
+Factor   = Group | OptGrp | CharVal | Str | RuleName;
+Group    = '(', Hsp, Body, Hsp, ')';
+OptGrp   = '[', Hsp, Body, Hsp, ']';
+CharVal  = '%', (HexVal | DecVal | BinVal);
+HexVal   = ('x' | 'X'), HexCpnt, ('-', HexCpnt | {'.', HexCpnt});
+DecVal   = ('d' | 'D'), DecCpnt, ('-', DecCpnt | {'.', DecCpnt});
+BinVal   = ('b' | 'B'), BinCpnt, ('-', BinCpnt | {'.', BinCpnt});
+HexCpnt  = HexDig, {HexDig};
+DecCpnt  = DecDig, {DecDig};
+BinCpnt  = BinDig, {BinDig};
+HexDig   = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | 'a' | 'b' | 'c' | 'd' | 'e' | 'f' | 'A' | 'B' | 'C' | 'D' | 'E' | 'F';
+DecDig   = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9';
+BinDig   = '0' | '1';
+Str      = '"', {DChr}, '"';
+DChr     = ' ' | '!' | '#' | '$' | '%' | '&' | '\'' | '(' | ')' | '*' | '+' | ',' | '-' | '.' | '/' | '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | ':' | ';' | '<' | '=' | '>' | '?' | '@' | 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I' | 'J' | 'K' | 'L' | 'M' | 'N' | 'O' | 'P' | 'Q' | 'R' | 'S' | 'T' | 'U' | 'V' | 'W' | 'X' | 'Y' | 'Z' | '[' | '\\' | ']' | '^' | '_' | '`' | 'a' | 'b' | 'c' | 'd' | 'e' | 'f' | 'g' | 'h' | 'i' | 'j' | 'k' | 'l' | 'm' | 'n' | 'o' | 'p' | 'q' | 'r' | 's' | 't' | 'u' | 'v' | 'w' | 'x' | 'y' | 'z' | '{' | '|' | '}' | '~';
+RuleName = NameF, {NameR};
+NameF    = 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I' | 'J' | 'K' | 'L' | 'M' | 'N' | 'O' | 'P' | 'Q' | 'R' | 'S' | 'T' | 'U' | 'V' | 'W' | 'X' | 'Y' | 'Z' | 'a' | 'b' | 'c' | 'd' | 'e' | 'f' | 'g' | 'h' | 'i' | 'j' | 'k' | 'l' | 'm' | 'n' | 'o' | 'p' | 'q' | 'r' | 's' | 't' | 'u' | 'v' | 'w' | 'x' | 'y' | 'z' | '_';
+NameR    = 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I' | 'J' | 'K' | 'L' | 'M' | 'N' | 'O' | 'P' | 'Q' | 'R' | 'S' | 'T' | 'U' | 'V' | 'W' | 'X' | 'Y' | 'Z' | 'a' | 'b' | 'c' | 'd' | 'e' | 'f' | 'g' | 'h' | 'i' | 'j' | 'k' | 'l' | 'm' | 'n' | 'o' | 'p' | 'q' | 'r' | 's' | 't' | 'u' | 'v' | 'w' | 'x' | 'y' | 'z' | '_' | '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '-';
+Hsp      = {HspCh};
+HspCh    = ' ' | '\t';
+Wsp      = {WspCh};
+WspCh    = ' ' | '\t' | '\n' | '\r';

@@ -1,0 +1,28 @@
+; ABNF meta-grammar written in ABNF — self-describing
+; Describes the subset of ABNF syntax used by rdp-gen.
+;
+; Covers: rule definitions (=), alternation (/), double-quoted string literals,
+; zero-or-more (*X), one-or-more (1*X), optional groups ([...]), and the
+; DQUOTE core rule.  Does not cover char-range rules (%xNN-NN) or prose-val.
+;
+; Because this grammar is itself written in ABNF and describes ABNF, it
+; demonstrates the "self-describing" property of the grammar format.
+; Feed this file to rdp-gen to produce a TypeScript parser that reads ABNF.
+;
+; Test input: any valid ABNF rule, e.g.:
+;   Greeting = "hello" / "world"
+
+Grammar  = *ws Rule *(*ws Rule) *ws
+Rule     = RuleName hsp "=" hsp Body
+Body     = Sequence *(hsp "/" hsp Sequence)
+Sequence = Term *(hsp Term)
+Term     = Rep Element / Element
+Rep      = ("1" "*") / "*"
+Element  = Group / OptGrp / Str / RuleName
+Group    = "(" *ws Body *ws ")"
+OptGrp   = "[" *ws Body *ws "]"
+Str      = DQUOTE *DChar DQUOTE
+DChar    = %x20-21 / %x23-7E
+RuleName = ALPHA *( ALPHA / DIGIT / "-" / "_" )
+ws       = %x20 / %x09 / %x0A / %x0D
+hsp      = *( %x20 / %x09 )

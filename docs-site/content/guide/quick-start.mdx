@@ -1,0 +1,37 @@
+---
+title: 'Quick Start'
+slug:  'quick-start'
+order: 2
+---
+
+## Quick start — scaffold a new project
+
+```bash
+npm install -g @configuredthings/rdp.js
+mkdir my-parser && cd my-parser
+rdp-gen init --name my-parser
+npm install
+```
+
+`rdp-gen init` writes a `package.json` and a `tsconfig.json` with all required compiler options pre-configured.
+
+## Manual setup
+
+Install: `npm install @configuredthings/rdp.js`
+
+Required `tsconfig.json` options:
+```json
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "moduleResolution": "node16"
+  }
+}
+```
+
+- `target: ES2022` — required for native `#` private fields
+- `strict: true` — generated code is written to strict standards
+- `noUncheckedIndexedAccess: true` — all array accesses are null-aware
+- `moduleResolution: node16` or `bundler` — required for the package exports map

@@ -1,0 +1,237 @@
+/*
+ * Configured Things corporate theme for TypeDoc 0.28
+ *
+ * Overrides TypeDoc's light/dark CSS variable sets with the CT brand palette.
+ * CT primary blue: #0056A3   CT dark: #333333
+ */
+
+/* ── Google Fonts imports ─────────────────────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Archivo:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Poppins:ital,wght@0,500;0,600;0,700;0,800;1,500;1,600&display=swap');
+
+/* ── Light mode ──────────────────────────────────────────────────────────── */
+:root {
+    /* Backgrounds */
+    --light-color-background:           #ffffff;
+    --light-color-background-secondary: #f0f6fd;   /* CT blue-faint */
+    --light-color-background-active:    #c2d9f0;   /* CT blue-mid   */
+
+    /* Text */
+    --light-color-text:         #333333;           /* CT dark       */
+    --light-color-contrast-text:#000000;
+    --light-color-text-aside:   #5a6c7e;
+
+    /* Accent / borders */
+    --light-color-accent:       #c2d9f0;           /* CT blue-mid   */
+
+    /* Links and focus */
+    --light-color-link:         #0056A3;           /* CT blue       */
+    --light-color-focus-outline:#0056A3;
+
+    /* TypeScript kind colours — lean into the CT blue family            */
+    /* Class and constructor stay CT blue                                 */
+    --light-color-ts-class:           #0056A3;
+    --light-color-ts-constructor:     #0056A3;
+    /* Keywords: slightly darker blue                                     */
+    --light-color-ts-keyword:         #003e7a;
+    /* Interface: teal variant of blue                                    */
+    --light-color-ts-interface:       #007a9e;
+    /* Method / call-signature: darker CT blue                            */
+    --light-color-ts-method:          #0056A3;
+    --light-color-ts-call-signature:  #0056A3;
+    /* Function: medium blue                                              */
+    --light-color-ts-function:        #1a6bc4;
+    /* Property / index-signature                                         */
+    --light-color-ts-property:        #5c3d1e;
+    --light-color-ts-index-signature: #5c3d1e;
+    /* Variable / parameter                                               */
+    --light-color-ts-variable:        #234ea0;
+    --light-color-ts-parameter:       #234ea0;
+    /* Type alias / reference / accessor: unchanged from default          */
+}
+
+/* ── Dark mode ───────────────────────────────────────────────────────────── */
+:root {
+    /* Backgrounds */
+    --dark-color-background:           #0a1520;   /* very dark blue  */
+    --dark-color-background-secondary: #0f1e2e;
+    --dark-color-background-active:    #1e3347;
+
+    /* Text */
+    --dark-color-text:         #e8edf2;
+    --dark-color-contrast-text:#ffffff;
+    --dark-color-text-aside:   #8aa3bd;
+
+    /* Accent / borders */
+    --dark-color-accent:       #1e3347;
+
+    /* Links and focus */
+    --dark-color-link:         #4a9ee8;
+    --dark-color-focus-outline:#4a9ee8;
+
+    /* TypeScript kind colours in dark mode */
+    --dark-color-ts-class:           #7dc0ff;
+    --dark-color-ts-constructor:     #7dc0ff;
+    --dark-color-ts-keyword:         #a8d4ff;
+    --dark-color-ts-interface:       #5dd5f5;
+    --dark-color-ts-method:          #6bbfff;
+    --dark-color-ts-call-signature:  #6bbfff;
+    --dark-color-ts-function:        #88c8ff;
+    --dark-color-ts-variable:        #9cb8e8;
+    --dark-color-ts-parameter:       #9cb8e8;
+}
+
+/* ── Typography ──────────────────────────────────────────────────────────── */
+@layer typedoc {
+    /* Body text: Archivo */
+    body {
+        font-family: 'Archivo', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    /* Headings: Poppins */
+    h1, h2, h3, h4, h5, h6 {
+        font-family: 'Poppins', sans-serif;
+    }
+
+    .tsd-page-title h1,
+    .tsd-hierarchy h2,
+    .tsd-comment > .tsd-comment {
+        font-family: 'Poppins', sans-serif;
+    }
+}
+
+/* ── Toolbar / header ────────────────────────────────────────────────────── */
+@layer typedoc {
+    /*
+     * Our injected .site-header handles branding and navigation.
+     * Hide the TypeDoc toolbar's title and nav links to avoid duplication;
+     * the toolbar itself is kept for its search / theme-toggle / settings controls.
+     */
+    a.title,
+    #tsd-toolbar-links {
+        display: none;
+    }
+
+    .tsd-page-toolbar {
+        border-top: none;
+    }
+
+    /* Push search / theme-toggle / settings to the right now that the title is gone */
+    .tsd-toolbar-contents {
+        justify-content: flex-end;
+    }
+
+    /* Active nav item highlight */
+    .tsd-navigation a.current,
+    .tsd-navigation a:hover {
+        color: var(--color-link);
+    }
+
+    /* "Selected" sidebar item uses CT blue background tint */
+    .tsd-navigation li.selected > a,
+    .tsd-navigation li.selected > span {
+        background: #e6f0fa;
+        color: #0056A3;
+        font-weight: 600;
+    }
+
+    /* Member signatures */
+    .tsd-signature {
+        border-left: 3px solid #0056A3;
+    }
+
+    /* Breadcrumb separator */
+    .tsd-breadcrumb a:hover {
+        color: #0056A3;
+    }
+
+    /* Search highlight */
+    .tsd-matched-text {
+        background: #c2d9f0;
+        color: #003e7a;
+    }
+
+    /* Source file link */
+    .tsd-anchor-link:hover {
+        color: #0056A3;
+    }
+}
+
+/* ── Injected site header ─────────────────────────────────────────────────── */
+
+.site-header {
+    background: #ffffff;
+    border-bottom: 1px solid #d0dde9;
+    padding: 0 1.5rem;
+    height: 52px;
+    display: flex;
+    align-items: center;
+}
+
+.site-header-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+    width: 100%;
+    display: flex;
+    align-items: center;
+}
+
+.site-logo {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+
+.site-logo a {
+    display: flex;
+    align-items: center;
+    text-decoration: none;
+}
+
+.site-logo a:hover { opacity: 0.8; }
+
+.site-logo-img {
+    height: 28px;
+    width: auto;
+    max-width: 180px;
+    display: block;
+}
+
+.site-logo-name {
+    font-family: 'Archivo', monospace;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #5a6c7e;
+    text-decoration: none;
+}
+
+.site-logo-name:hover { color: #0056A3; }
+
+.site-nav {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    margin-left: auto;
+    font-family: 'Archivo', sans-serif;
+}
+
+.site-nav a {
+    font-size: 0.88rem;
+    font-weight: 500;
+    color: #5a6c7e;
+    text-decoration: none;
+}
+
+.site-nav a:hover { color: #0056A3; }
+
+/* Dark mode overrides */
+@media (prefers-color-scheme: dark) {
+    .site-header {
+        background: #1c1c1e;
+        border-bottom-color: #2e3a47;
+    }
+
+    .site-logo-name { color: #8fa8bf; }
+    .site-logo-name:hover { color: #5ba4e0; }
+    .site-nav a { color: #8fa8bf; }
+    .site-nav a:hover { color: #5ba4e0; }
+}

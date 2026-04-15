@@ -1,0 +1,171 @@
+---
+title: 'Extending RDParser'
+slug:  'extending'
+order: 3
+---
+
+## Extending `RDParser` — hand-crafted parsers
+
+For full control over the parse result type and error handling, subclass `RDParser` directly
+and implement each production rule as a method.
+
+### Recommended pattern
+
+Keep the constructor `private` and expose a `static parse()` entry point. This makes the
+one-shot lifecycle explicit — the instance is created, used once, then discarded.
+
+> **Note:** `rdp-gen` generates this pattern automatically. If you are using the code
+> generator, you get `private constructor` and `static parse(input: string)` for free.
+
+```ts
+import { RDParser } from '@configuredthings/rdp.js'
+
+export class MyParser extends RDParser {
+  private constructor(source: DataView) { super(source) }
+
+  static parse(input: string): MyResult {
+    const bytes = new TextEncoder().encode(input)
+    return new MyParser(new DataView(bytes.buffer)).parse()
+  }
+
+  parse(): MyResult {
+    // production rules here
+  }
+}
+```
+
+### Primitive operations
+
+| Method | Description |
+|--------|-------------|
+| `peek()` | Returns the current byte, or `null` at end of input — does not consume |
+| `consume()` | Returns the current byte and advances one position |
+| `advance()` | Advances one position without returning the byte |
+| `matchChar(b)` | Advances and returns `true` if the current byte equals `b`; `false` otherwise |
+| `expectChar(b, label)` | Like `matchChar` but throws `RDParserException` on mismatch |
+| `atEnd()` | Returns `true` when all input has been consumed |
+| `getPosition()` | Returns the current byte offset |
+| `restorePosition(pos)` | Backtracks to a saved position |
+| `error(message)` | Throws `RDParserException` with position information |
+| `decodeSlice(start, end)` | Decodes a UTF-8 slice of the source buffer as a string |
+
+### Worked example — arithmetic calculator
+
+This parser evaluates arithmetic expressions, returning a `number` directly rather than a
+parse tree. It implements the same grammar as the [rdp-gen tutorial](/docs/tutorial/):
+
+```
+Expr   = wsp, Term, {wsp, ('+' | '-'), wsp, Term}, wsp;
+Term   = Factor, {wsp, ('*' | '/'), wsp, Factor};
+Factor = '(', Expr, ')' | Number;
+Number = Digit, {Digit};
+```
+
+```ts
+import { RDParser } from '@configuredthings/rdp.js'
+import { RDParserException } from '@configuredthings/rdp.js'
+
+export class ArithmeticParser extends RDParser {
+  private constructor(source: DataView) { super(source) }
+
+  static parse(input: string): number {
+    const bytes = new TextEncoder().encode(input)
+    return new ArithmeticParser(new DataView(bytes.buffer)).parse()
+  }
+
+  // Entry point — matches the full input
+  parse(): number {
+    this.skipWsp()
+    const value = this.parseExpr()
+    this.skipWsp()
+    if (!this.atEnd()) this.error('unexpected input after expression')
+    return value
+  }
+
+  // Expr = wsp, Term, {wsp, ('+' | '-'), wsp, Term}, wsp;
+  private parseExpr(): number {
+    let value = this.parseTerm()
+    this.skipWsp()
+    while (!this.atEnd()) {
+      const op = this.peek()
+      if (op !== 0x2b && op !== 0x2d) break   // '+' or '-'
+      this.advance()
+      this.skipWsp()
+      const right = this.parseTerm()
+      value = op === 0x2b ? value + right : value - right
+      this.skipWsp()
+    }
+    return value
+  }
+
+  // Term = Factor, {wsp, ('*' | '/'), wsp, Factor};
+  private parseTerm(): number {
+    let value = this.parseFactor()
+    this.skipWsp()
+    while (!this.atEnd()) {
+      const op = this.peek()
+      if (op !== 0x2a && op !== 0x2f) break   // '*' or '/'
+      this.advance()
+      this.skipWsp()
+      const right = this.parseFactor()
+      value = op === 0x2a ? value * right : value / right
+      this.skipWsp()
+    }
+    return value
+  }
+
+  // Factor = '(', Expr, ')' | Number;
+  private parseFactor(): number {
+    if (this.peek() === 0x28) {   // '('
+      this.advance()
+      this.skipWsp()
+      const value = this.parseExpr()
+      this.skipWsp()
+      this.expectChar(0x29, "')'")
+      return value
+    }
+    return this.parseNumber()
+  }
+
+  // Number = Digit, {Digit};
+  private parseNumber(): number {
+    if (!this.isDigit(this.peek())) this.error('expected a digit')
+    let n = 0
+    while (this.isDigit(this.peek())) {
+      n = n * 10 + (this.consume() - 0x30)
+    }
+    return n
+  }
+
+  private skipWsp(): void {
+    while (this.peek() === 0x20) this.advance()
+  }
+
+  private isDigit(b: number | null): b is number {
+    return b !== null && b >= 0x30 && b <= 0x39
+  }
+}
+```
+
+Usage:
+
+```ts
+ArithmeticParser.parse('42')              // → 42
+ArithmeticParser.parse('3 + 4 * 2')      // → 11
+ArithmeticParser.parse('(3 + 4) * 2')    // → 14
+ArithmeticParser.parse('10 / (2 + 3)')   // → 2
+```
+
+Parsing fails with `RDParserException`:
+
+```ts
+import { RDParserException } from '@configuredthings/rdp.js'
+
+try {
+  ArithmeticParser.parse('??')
+} catch (e) {
+  if (e instanceof RDParserException) {
+    console.error(e.message)   // "expected a digit (at position 0)"
+  }
+}
+```

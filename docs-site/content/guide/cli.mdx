@@ -1,0 +1,193 @@
+---
+title: 'CLI Reference'
+slug:  'cli'
+order: 6
+---
+
+## CLI Reference — `rdp-gen`
+
+`rdp-gen` is the code generator bundled with `@configuredthings/rdp.js`.
+It reads a grammar file (EBNF or ABNF) and emits a fully typed TypeScript
+parser class that extends `RDParser` or `ObservableRDParser`.
+
+### Installation
+
+Install the package globally to get `rdp-gen` on your PATH:
+
+```bash
+npm install -g @configuredthings/rdp.js
+```
+
+Or use it locally via `npx`:
+
+```bash
+npx rdp-gen grammar.ebnf --parser-name MyParser
+```
+
+---
+
+### `rdp-gen <grammar>` — generate a parser
+
+```
+rdp-gen <grammar> [options]
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `<grammar>` | (required) | Path to a `.ebnf` or `.abnf` grammar file |
+| `-o, --output <file>` | stdout | Write output to a file instead of stdout |
+| `--format <fmt>` | inferred from extension | Force `ebnf` or `abnf` |
+| `--parser-name <name>` | `GeneratedParser` | Class name for the generated parser |
+| `--tree-name <name>` | `ParseTree` | Type name for the generated parse tree |
+| `--observable` | off | Extend `ObservableRDParser`; adds `notifyEnter`/`notifyExit` calls |
+| `--ast-only` | off | Emit the grammar AST as JSON (used by the playground) |
+| `--abnf-case-sensitive-strings` | off | Match ABNF quoted string literals case-sensitively |
+
+#### Examples
+
+Generate a parser to a file:
+
+```bash
+rdp-gen grammar.ebnf --parser-name JsonParser --output src/JsonParser.ts
+```
+
+Generate with tracing support:
+
+```bash
+rdp-gen grammar.ebnf --parser-name MyParser --observable --output src/MyParser.ts
+```
+
+Parse an ABNF grammar and write to stdout:
+
+```bash
+rdp-gen protocol.abnf --format abnf --parser-name FrameParser
+```
+
+---
+
+### `rdp-gen init` — scaffold a new project
+
+```
+rdp-gen init [options]
+```
+
+Creates a `package.json` and `tsconfig.json` in the current directory with all
+required compiler options pre-configured.
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--name <name>` | `my-parser` | npm package name for the scaffolded project |
+
+#### Example
+
+```bash
+mkdir my-parser && cd my-parser
+rdp-gen init --name my-parser
+npm install
+```
+
+The scaffolded `tsconfig.json` includes:
+
+```json
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "moduleResolution": "node16"
+  }
+}
+```
+
+These options are **required** — the generated parser uses native `#` private
+fields (`target: ES2022`), strict null checks, and the package exports map
+(`moduleResolution: node16` or `bundler`).
+
+---
+
+### Generated class shape
+
+Every parser emitted by `rdp-gen` follows the same structure:
+
+```ts
+export class MyParser extends RDParser {
+  private constructor(source: DataView) { super(source) }
+
+  /** Encode `input`, parse it, and return the typed parse tree — or throw on failure. */
+  static parse(input: string): RootNode { ... }
+
+  parse(): RootNode { ... }          // called internally by static parse
+  #parse_rule(): RuleNode | null { ... }  // one private method per production rule
+}
+```
+
+The constructor is `private`, so callers always go through `static parse`:
+
+```ts
+const tree = MyParser.parse('some input')
+```
+
+With `--observable`, the static method gains an optional second parameter:
+
+```ts
+static parse(input: string, observer?: ParseObserver): RootNode
+```
+
+Pass any `ParseObserver` implementation (e.g. `DebugObserver`, `TraceObserver`) to trace
+the parse without constructing the instance directly.
+
+---
+
+### Grammar format — EBNF
+
+`rdp-gen` accepts ISO 14977 EBNF.
+
+```ebnf
+(* block comments use (* ... *) — they nest *)
+
+Expr   = wsp, Term, {wsp, ('+' | '-'), wsp, Term}, wsp;
+Term   = Factor, {wsp, ('*' | '/'), wsp, Factor};
+Factor = '(', Expr, ')' | Number;
+Number = Digit, {Digit};
+Digit  = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9';
+wsp    = {' '};
+```
+
+| Syntax | Meaning |
+|--------|---------|
+| `'x'` or `"x"` | String literal (`\n` `\t` `\r` `\\` `\'` `\"` escape sequences supported) |
+| `A, B` | Sequence (comma concatenation) |
+| `A \| B` | Alternation |
+| `[A]` | Optional (zero or one) |
+| `{A}` | Zero or more |
+| `A, {A}` | One or more |
+| `n * A` | Exactly n repetitions |
+| `A - B` | Exception: match A but not B |
+| `(A)` | Grouping |
+
+### Grammar format — ABNF
+
+Pass `--format abnf` (or use a `.abnf` file extension) to parse RFC 5234 ABNF.
+Quoted strings are case-insensitive by default; use `--abnf-case-sensitive-strings`
+to preserve exact case.
+
+---
+
+### LL(1) requirement
+
+`rdp-gen` generates LL(1) parsers only. It detects **left recursion** at
+generation time and exits with an error. **Common-prefix violations are detected
+at runtime** — if an alternative consumes input and then fails, the generated
+parser throws:
+
+```
+LL(1) violation: alternative consumed input up to position N before failing
+(started at M) — two alternatives share a common prefix
+```
+
+This surfaces non-LL(1) grammars immediately in tests rather than letting them
+silently mis-parse production input.
+
+If your grammar is not LL(1), rewrite it to eliminate left recursion using
+iteration (`*` / `+`), and ensure each alternative is uniquely identified by
+its first character.

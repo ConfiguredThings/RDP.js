@@ -1,0 +1,97 @@
+{
+  "name": "@configuredthings/rdp.js",
+  "version": "0.1.0",
+  "description": "A minimal typed base class for writing recursive descent parsers in TypeScript",
+  "author": {
+    "name": "Configured Things Ltd.",
+    "email": "engineering@configuredthings.com",
+    "url": "https://configuredthings.com/"
+  },
+  "repository": "github:ConfiguredThings/RDP.js",
+  "bugs": {
+    "url": "https://github.com/ConfiguredThings/RDP.js/issues"
+  },
+  "keywords": [
+    "parser",
+    "recursive-descent",
+    "typescript",
+    "ebnf",
+    "abnf",
+    "ll1",
+    "parser-generator",
+    "grammar"
+  ],
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "rdp-gen": "./dist/esm/cli/rdp-gen.js"
+  },
+  "exports": {
+    ".": {
+      "import": "./dist/esm/index.js",
+      "require": "./dist/cjs/index.js",
+      "types": "./dist/esm/index.d.ts"
+    },
+    "./observable": {
+      "import": "./dist/esm/observable/index.js",
+      "require": "./dist/cjs/observable/index.js",
+      "types": "./dist/esm/observable/index.d.ts"
+    },
+    "./generator": {
+      "import": "./dist/esm/generator/index.js",
+      "require": "./dist/cjs/generator/index.js",
+      "types": "./dist/esm/generator/index.d.ts"
+    },
+    "./interpreter": {
+      "import": "./dist/esm/interpreter/index.js",
+      "require": "./dist/cjs/interpreter/index.js",
+      "types": "./dist/esm/interpreter/index.d.ts"
+    },
+    "./grammars": {
+      "import": "./dist/esm/grammars/index.js",
+      "require": "./dist/cjs/grammars/index.js",
+      "types": "./dist/esm/grammars/index.d.ts"
+    }
+  },
+  "main": "./dist/cjs/index.js",
+  "module": "./dist/esm/index.js",
+  "types": "./dist/esm/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22",
+    "npm": ">=10"
+  },
+  "scripts": {
+    "generate:grammars": "node scripts/generate-grammar-index.mjs",
+    "prebuild": "npm run generate:grammars",
+    "build": "tsc -p tsconfig.cjs.json && tsc -p tsconfig.esm.json",
+    "test": "node --experimental-vm-modules --no-warnings=ExperimentalWarning node_modules/.bin/jest",
+    "lint": "eslint src docs-site/src",
+    "docs": "tsx docs-site/scripts/render-site-header.tsx && typedoc",
+    "prepare": "husky",
+    "generate": "node dist/esm/cli/rdp-gen.js",
+    "generate:meta": "mkdir -p src/parsers/generated && node dist/esm/cli/rdp-gen.js src/grammars/ebnf-meta.ebnf --parser-name EBNFInEBNFParser --output src/parsers/generated/ebnf-in-ebnf-parser.ts && node dist/esm/cli/rdp-gen.js src/grammars/ebnf-meta.abnf --parser-name EBNFInABNFParser --output src/parsers/generated/ebnf-in-abnf-parser.ts && node dist/esm/cli/rdp-gen.js src/grammars/abnf-meta.ebnf --parser-name ABNFInEBNFParser --output src/parsers/generated/abnf-in-ebnf-parser.ts && node dist/esm/cli/rdp-gen.js src/grammars/abnf-meta.abnf --parser-name ABNFInABNFParser --output src/parsers/generated/abnf-in-abnf-parser.ts",
+    "prepublishOnly": "git diff-files --quiet"
+  },
+  "dependencies": {
+    "commander": "^14.0.3"
+  },
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "@types/node": "^25.6.0",
+    "eslint": "^10.2.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.5",
+    "husky": "^9.1.7",
+    "jest": "^30.3.0",
+    "lint-staged": "^16.4.0",
+    "prettier": "^3.8.2",
+    "ts-jest": "^29.4.9",
+    "typedoc": "^0.28.19",
+    "typescript": "^6.0.2",
+    "tsx": "^4.19.0",
+    "typescript-eslint": "^8.58.2"
+  }
+}

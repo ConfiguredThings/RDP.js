@@ -1,0 +1,92 @@
+---
+title: 'Tutorial: Arithmetic Parser'
+slug:  'tutorial'
+order: 4
+---
+
+## Tutorial: arithmetic expression parser with `rdp-gen`
+
+This tutorial walks through the complete `rdp-gen` workflow: write an EBNF grammar,
+generate a TypeScript parser class, and use it to parse input.
+
+### Step 1 — write the grammar
+
+Create `arithmetic.ebnf`:
+
+```ebnf
+(* Arithmetic expression grammar — ISO 14977 EBNF *)
+
+Expr   = wsp, Term, {wsp, ('+' | '-'), wsp, Term}, wsp;
+Term   = Factor, {wsp, ('*' | '/'), wsp, Factor};
+Factor = '(', Expr, ')' | Number;
+Number = Digit, {Digit};
+Digit  = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9';
+wsp    = {' '};
+```
+
+Operator precedence is encoded in the production hierarchy: `Expr` → `Term` → `Factor` → `Number`.
+Each alternative is distinguished by its first character, so the grammar is LL(1).
+
+Valid inputs: `42`, `3 + 4`, `3 + 4 * 2`, `(3 + 4) * 2`, `10 / (2 + 3) - 1`
+
+### Step 2 — generate the parser
+
+```bash
+rdp-gen arithmetic.ebnf --parser-name ArithmeticParser --output ArithmeticParser.ts
+```
+
+`rdp-gen` emits a fully typed TypeScript class with a `static parse(input: string)` entry
+point that encodes the input, constructs the parser, and returns a typed parse tree on success
+or throws `RDParserException` on failure.
+
+### Step 3 — use the generated parser
+
+```ts
+import { ArithmeticParser } from './ArithmeticParser.js'
+import { RDParserException } from '@configuredthings/rdp.js'
+
+function tryParse(input: string): boolean {
+  try {
+    ArithmeticParser.parse(input)
+    return true
+  } catch (e) {
+    if (e instanceof RDParserException) return false
+    throw e
+  }
+}
+
+tryParse('3 + 4 * 2')   // → true
+tryParse('??')           // → false
+```
+
+### With tracing support
+
+Pass `--observable` to generate a parser that extends `ObservableRDParser`:
+
+```bash
+rdp-gen arithmetic.ebnf \
+  --parser-name ArithmeticParser \
+  --observable \
+  --output ArithmeticParser.ts
+```
+
+Pass a `DebugObserver` as the second argument to `static parse` to print an indented call tree:
+
+```ts
+import { ArithmeticParser } from './ArithmeticParser.js'
+import { DebugObserver } from '@configuredthings/rdp.js/observable'
+
+ArithmeticParser.parse('3 + 4', new DebugObserver())
+// → expr   pos:0
+//   → term  pos:0
+//   ← term  matched  pos:1
+// ← expr   matched  pos:5
+```
+
+See [Debugging](/docs/debugging/) for full observer documentation.
+
+### See it live
+
+Open the [playground](/playground/), choose **Load example → Arithmetic (EBNF)**, and click
+**Compile** to see the generated TypeScript. Enter an expression in the test input panel to
+watch the interpreter parse it.

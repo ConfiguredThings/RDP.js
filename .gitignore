@@ -1,0 +1,20 @@
+node_modules/
+dist/
+src/parsers/generated/
+src/grammars/index.ts
+docs/
+coverage/
+*.tgz
+
+# Gatsby docs-site
+docs-site/node_modules/
+docs-site/public/
+docs-site/.cache/
+
+# Generated static assets (produced by CI scripts — originals live elsewhere in the repo)
+docs-site/typedoc-theme/site-header.html
+docs-site/static/api/
+docs-site/static/architecture.svg
+docs-site/static/configuredthings.svg
+docs-site/static/configuredthings-light.svg
+docs-site/static/recursquirrel.svg

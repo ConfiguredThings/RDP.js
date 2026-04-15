@@ -1,0 +1,15 @@
+{
+  "entryPoints": ["src/rdparser.ts", "src/observable/index.ts", "src/generator/index.ts", "src/interpreter/index.ts"],
+  "entryPointStrategy": "resolve",
+  "sortEntryPoints": false,
+  "out": "docs-site/static/api",
+  "name": "@configuredthings/rdp.js",
+  "includeVersion": true,
+  "readme": "README.md",
+  "tsconfig": "tsconfig.json",
+  "customCss": "docs-site/typedoc-theme/custom.css",
+  "plugin": ["./docs-site/typedoc-plugin-header.mjs"],
+  "navigationLinks": {
+    "← Docs": "../"
+  }
+}

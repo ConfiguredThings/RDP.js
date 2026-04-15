@@ -1,0 +1,12 @@
+.cache/
+public/
+node_modules/
+# Generated parser files (produced by npm run copy-assets)
+src/parser/ArithmeticParser.ts
+src/parser/arithmetic-ast.json
+src/parser/parseTree.ts
+# Generated MDX from README
+content/guide/generated/
+# Copied TypeDoc output
+static/api/
+static/recursquirrel.svg

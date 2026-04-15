@@ -1,0 +1,35 @@
+(* ISO 14977 EBNF meta-grammar — written in ISO EBNF.
+   This grammar is self-describing: it can parse its own source text.
+
+   Supports: rules terminated by ';', comma concatenation, '|' alternation,
+   '{...}' repetition, '[...]' optional, '(...)' grouping, n*P counted
+   repetition, A-B exception, single- and double-quoted string literals
+   with \n \t \r \\ \' \" escape sequences, and (* ... *) block comments.
+
+   Valid test input: any ISO EBNF grammar, including this file itself. *)
+
+Grammar  = {Rule};
+Rule     = Wsp, Name, Wsp, '=', Wsp, Body, Wsp, ';';
+Body     = Sequence, {Wsp, '|', Wsp, Sequence};
+Sequence = Term, {Wsp, ',', Wsp, Term};
+Term     = Primary, [Wsp, '-', Wsp, Primary];
+Primary  = '{', Wsp, Body, Wsp, '}'
+         | '[', Wsp, Body, Wsp, ']'
+         | '(', Wsp, Body, Wsp, ')'
+         | Integer, Wsp, '*', Wsp, Primary
+         | Literal
+         | Name;
+Integer  = Digit, {Digit};
+Digit    = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9';
+Literal  = "'", {SqChr}, "'" | '"', {DqChr}, '"';
+SqChr    = EscSeq | SqSafe;
+DqChr    = EscSeq | DqSafe;
+EscSeq   = '\\', EscChar;
+EscChar  = 'n' | 't' | 'r' | '\\' | '\'' | '"';
+SqSafe   = ' ' | '!' | '"' | '#' | '$' | '%' | '&' | '(' | ')' | '*' | '+' | ',' | '-' | '.' | '/' | '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | ':' | ';' | '<' | '=' | '>' | '?' | '@' | 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I' | 'J' | 'K' | 'L' | 'M' | 'N' | 'O' | 'P' | 'Q' | 'R' | 'S' | 'T' | 'U' | 'V' | 'W' | 'X' | 'Y' | 'Z' | '[' | ']' | '^' | '_' | '`' | 'a' | 'b' | 'c' | 'd' | 'e' | 'f' | 'g' | 'h' | 'i' | 'j' | 'k' | 'l' | 'm' | 'n' | 'o' | 'p' | 'q' | 'r' | 's' | 't' | 'u' | 'v' | 'w' | 'x' | 'y' | 'z' | '{' | '|' | '}' | '~';
+DqSafe   = ' ' | '!' | '#' | '$' | '%' | '&' | '\'' | '(' | ')' | '*' | '+' | ',' | '-' | '.' | '/' | '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | ':' | ';' | '<' | '=' | '>' | '?' | '@' | 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I' | 'J' | 'K' | 'L' | 'M' | 'N' | 'O' | 'P' | 'Q' | 'R' | 'S' | 'T' | 'U' | 'V' | 'W' | 'X' | 'Y' | 'Z' | '[' | ']' | '^' | '_' | '`' | 'a' | 'b' | 'c' | 'd' | 'e' | 'f' | 'g' | 'h' | 'i' | 'j' | 'k' | 'l' | 'm' | 'n' | 'o' | 'p' | 'q' | 'r' | 's' | 't' | 'u' | 'v' | 'w' | 'x' | 'y' | 'z' | '{' | '|' | '}' | '~';
+Name     = NameF, {NameR};
+NameF    = 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I' | 'J' | 'K' | 'L' | 'M' | 'N' | 'O' | 'P' | 'Q' | 'R' | 'S' | 'T' | 'U' | 'V' | 'W' | 'X' | 'Y' | 'Z' | 'a' | 'b' | 'c' | 'd' | 'e' | 'f' | 'g' | 'h' | 'i' | 'j' | 'k' | 'l' | 'm' | 'n' | 'o' | 'p' | 'q' | 'r' | 's' | 't' | 'u' | 'v' | 'w' | 'x' | 'y' | 'z' | '_';
+NameR    = 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I' | 'J' | 'K' | 'L' | 'M' | 'N' | 'O' | 'P' | 'Q' | 'R' | 'S' | 'T' | 'U' | 'V' | 'W' | 'X' | 'Y' | 'Z' | 'a' | 'b' | 'c' | 'd' | 'e' | 'f' | 'g' | 'h' | 'i' | 'j' | 'k' | 'l' | 'm' | 'n' | 'o' | 'p' | 'q' | 'r' | 's' | 't' | 'u' | 'v' | 'w' | 'x' | 'y' | 'z' | '_' | '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '-';
+Wsp      = {WspCh};
+WspCh    = ' ' | '\t' | '\n' | '\r';

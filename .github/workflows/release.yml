@@ -1,0 +1,116 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+permissions:
+  contents: write
+  id-token: write
+  pages: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  release:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get package version
+        id: version
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Verify tag matches package version
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          EXPECTED="v${{ steps.version.outputs.version }}"
+          if [ "$TAG" != "$EXPECTED" ]; then
+            echo "::error::Tag $TAG does not match package.json version $EXPECTED"
+            exit 1
+          fi
+          echo "✓ Tag $TAG matches package version"
+
+      - name: Check changelog entry exists
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          if ! grep -qE "^## \[$VERSION\]" CHANGELOG.md; then
+            echo "::error file=CHANGELOG.md::No changelog section found for version $VERSION. Expected a heading matching '## [$VERSION]'."
+            exit 1
+          fi
+          echo "✓ Changelog section found for $VERSION"
+
+      - name: Check changelog comparison link exists
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          if ! grep -qE "^\[$VERSION\]:" CHANGELOG.md; then
+            echo "::error file=CHANGELOG.md::No comparison link found for version $VERSION. Expected a line matching '[$VERSION]: https://...' at the bottom of CHANGELOG.md."
+            exit 1
+          fi
+          echo "✓ Comparison link found for $VERSION"
+
+      - name: Install PlantUML
+        run: sudo apt-get install -y plantuml
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install library dependencies
+        run: npm ci
+
+      - name: Test
+        run: npm test
+
+      - name: Build library
+        run: npm run build
+
+      - name: Generate API docs
+        run: npm run docs
+
+      - name: Publish to npm
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Extract changelog notes
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          awk "/^## \[$VERSION\]/{found=1; next} found && /^## /{exit} found{print}" CHANGELOG.md \
+            | sed '/^[[:space:]]*$/d' \
+            > release-notes.txt
+          echo "Release notes:"
+          cat release-notes.txt
+
+      - name: Create GitHub release
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --notes-file release-notes.txt
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install docs-site dependencies
+        run: npm ci
+        working-directory: docs-site
+
+      - name: Build docs site
+        run: npm run build
+        working-directory: docs-site
+
+      - uses: actions/configure-pages@v4
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs-site/public
+
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,0 +1,144 @@
+---
+title: 'Debugging'
+slug:  'debugging'
+order: 5
+---
+
+## Debugging with `ObservableRDParser`
+
+`ObservableRDParser` adds opt-in parse tracing via a `ParseObserver` interface.
+Attach one to receive a stream of `enter`/`exit`/`error` events for every production rule.
+
+For generated parsers, pass the observer as the second argument to the `static parse` method.
+For hand-written parsers that extend `ObservableRDParser` directly, call `withObserver(obs)`
+on the instance before calling `parse()`.
+
+Production parsers extend the lean `RDParser` and carry **zero observer overhead** — only
+parsers that explicitly extend `ObservableRDParser` incur any tracing cost.
+
+### Generating an observable parser
+
+Pass `--observable` to `rdp-gen`:
+
+```bash
+rdp-gen grammar.ebnf --parser-name MyParser --observable --output MyParser.ts
+```
+
+This changes the generated class to extend `ObservableRDParser` instead of `RDParser`, and
+adds an optional `observer?: ParseObserver` second argument to the `static parse` method.
+
+### `DebugObserver` — indented call tree
+
+`DebugObserver` formats parse events as an indented call tree and writes each line to a sink
+(defaults to `console.error`):
+
+```ts
+import { MyParser } from './MyParser.js'
+import { DebugObserver } from '@configuredthings/rdp.js/observable'
+
+MyParser.parse('3 + 4', new DebugObserver())
+```
+
+Example output for the arithmetic grammar parsing `3 + 4`:
+
+```
+→ expr    pos:0
+  → term  pos:0
+    → factor  pos:0
+      → number  pos:0
+      ← number  matched  pos:1
+    ← factor  matched  pos:1
+  ← term  matched  pos:1
+  → term  pos:4
+    → factor  pos:4
+      → number  pos:4
+      ← number  matched  pos:5
+    ← factor  matched  pos:5
+  ← term  matched  pos:5
+← expr    matched  pos:5
+```
+
+Redirect output to an array for assertions in tests:
+
+```ts
+const lines: string[] = []
+MyParser.parse('3 + 4', new DebugObserver(line => lines.push(line)))
+```
+
+### `TraceObserver` — structured events
+
+`TraceObserver` accumulates a full parse trace as an array of `ParseEvent` objects — useful
+for programmatic inspection and testing:
+
+```ts
+import { TraceObserver } from '@configuredthings/rdp.js/observable'
+
+const obs = new TraceObserver()
+MyParser.parse('42', obs)
+
+console.log(obs.events)
+// [
+//   { kind: 'enter', production: 'expr',   position: 0 },
+//   { kind: 'enter', production: 'term',   position: 0 },
+//   { kind: 'enter', production: 'number', position: 0 },
+//   { kind: 'exit',  production: 'number', position: 2, matched: true },
+//   { kind: 'exit',  production: 'term',   position: 2, matched: true },
+//   { kind: 'exit',  production: 'expr',   position: 2, matched: true },
+// ]
+```
+
+Each event is one of:
+
+```ts
+type ParseEvent =
+  | { kind: 'enter'; production: string; position: number }
+  | { kind: 'exit';  production: string; position: number; matched: boolean }
+  | { kind: 'error'; message: string;    position: number }
+```
+
+### Custom observer
+
+Implement `ParseObserver` directly for bespoke tracing:
+
+```ts
+import type { ParseObserver } from '@configuredthings/rdp.js/observable'
+
+class CountingObserver implements ParseObserver {
+  readonly calls = new Map<string, number>()
+
+  onEnterProduction(production: string): void {
+    this.calls.set(production, (this.calls.get(production) ?? 0) + 1)
+  }
+  onExitProduction(): void {}
+  onError(): void {}
+}
+
+const obs = new CountingObserver()
+MyParser.parse('3 + 4', obs)
+console.log(obs.calls)
+// Map { 'expr' => 1, 'term' => 2, 'factor' => 2, 'number' => 2, 'wsp' => 5 }
+```
+
+### Using `GrammarInterpreter` with an observer
+
+`GrammarInterpreter` extends `ObservableRDParser`, so you can attach any observer to it
+for step-by-step grammar debugging without a code-generation step:
+
+```ts
+import { GrammarInterpreter } from '@configuredthings/rdp.js/interpreter'
+import { EBNFParser }          from '@configuredthings/rdp.js/generator'
+import { TraceObserver }       from '@configuredthings/rdp.js/observable'
+
+const ast = EBNFParser.parse(`
+  Number = Digit, {Digit};
+  Digit  = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9';
+`)
+
+const obs = new TraceObserver()
+const bytes = new TextEncoder().encode('42')
+new GrammarInterpreter(ast, new DataView(bytes.buffer))
+  .withObserver(obs)
+  .parse()
+
+console.log(obs.events)
+```

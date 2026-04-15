@@ -1,0 +1,31 @@
+; ISO 14977 EBNF meta-grammar written in ABNF.
+; Describes the EBNF syntax accepted by rdp-gen (ISO 14977).
+;
+; Rules are terminated by ";".  Concatenation uses ",".  Alternation uses "|".
+; Grouping uses "()", optional uses "[]", repetition uses "{}".
+; n * P is counted repetition.  A - B is the exception operator.
+; Block comments (* ... *) are not covered by this meta-grammar.
+;
+; Test input: any valid ISO EBNF grammar (without (* *) comments), e.g.:
+;   Greeting = 'hello' | 'world';
+
+Grammar  = *Rule *ws
+Rule     = *ws Name *ws "=" *ws Body *ws ";"
+Body     = Sequence *(*ws "|" *ws Sequence)
+Sequence = Term *(*ws "," *ws Term)
+Term     = Primary [*ws "-" *ws Primary]
+Primary  = "{" *ws Body *ws "}"
+         / "[" *ws Body *ws "]"
+         / "(" *ws Body *ws ")"
+         / Integer *ws "*" *ws Primary
+         / Literal
+         / Name
+Integer  = 1*DIGIT
+Literal  = %x27 *SqChar %x27 / %x22 *DqChar %x22
+SqChar   = EscSeq / %x20-26 / %x28-5B / %x5D-7E
+DqChar   = EscSeq / %x20-21 / %x23-5B / %x5D-7E
+EscSeq   = %x5C (%x6E / %x74 / %x72 / %x5C / %x27 / %x22)
+Name     = NameF *NameR
+NameF    = ALPHA / "_"
+NameR    = ALPHA / DIGIT / "_" / "-"
+ws       = %x20 / %x09 / %x0A / %x0D

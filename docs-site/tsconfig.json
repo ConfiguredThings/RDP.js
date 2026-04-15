@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "lib": ["ES2020", "DOM"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "noEmit": true,
+    "resolveJsonModule": true,
+    "paths": {
+      "@configuredthings/rdp.js/observable":   ["../src/observable.ts"],
+      "@configuredthings/rdp.js/generator":   ["../src/generator/index.ts"],
+      "@configuredthings/rdp.js/interpreter": ["../src/interpreter/index.ts"],
+      "@configuredthings/rdp.js/grammars":    ["../src/grammars/index.ts"],
+      "@configuredthings/rdp.js":             ["../src/index.ts"]
+    }
+  },
+  "include": ["src/**/*", "gatsby-node.ts", "gatsby-browser.tsx", "gatsby-ssr.tsx"]
+}
