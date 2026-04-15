@@ -9,6 +9,7 @@ permissions:
   contents: write
   id-token: write
   pages: write
+  attestations: write
 
 concurrency:
   group: pages
@@ -76,8 +77,16 @@ jobs:
       - name: Generate API docs
         run: npm run docs
 
+      - name: Pack library
+        run: npm pack
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: '*.tgz'
+
       - name: Publish to GitHub Packages
-        run: npm publish --provenance --access public
+        run: npm publish --provenance --access public *.tgz
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
