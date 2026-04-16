@@ -10,8 +10,9 @@
 import { RDParser } from '@configuredthings/rdp.js'
 
 export class ArithParser extends RDParser {
-
-  private constructor(source: DataView) { super(source) }
+  private constructor(source: DataView) {
+    super(source)
+  }
 
   /** Parse `input` and return the typed parse tree, or throw on failure. */
   static parse(input: string): ExprNode {
@@ -36,30 +37,64 @@ export class ArithParser extends RDParser {
     loop_seq0: while (true) {
       const _pos0 = this.getPosition()
       const _wsp1 = this.#parse_wsp()
-      if (_wsp1 === null) { this.restorePosition(_pos0); break loop_seq0 }
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      if (_wsp1 === null) {
+        this.restorePosition(_pos0)
+        break loop_seq0
+      }
+
       let _alt0!: string
       found_alt0: {
         alt_ch0: {
           const _pos1 = this.getPosition()
           const _ch0 = this.readChar(0x2b) // "+"
-          if (_ch0 === null) { if (this.getPosition() !== _pos1) throw new Error('LL(1) violation: alternative consumed input up to position ' + this.getPosition() + ' before failing (started at ' + _pos1 + ') — two alternatives share a common prefix'); this.restorePosition(_pos1); break alt_ch0 }
+          if (_ch0 === null) {
+            if (this.getPosition() !== _pos1)
+              throw new Error(
+                'LL(1) violation: alternative consumed input up to position ' +
+                  this.getPosition() +
+                  ' before failing (started at ' +
+                  _pos1 +
+                  ') — two alternatives share a common prefix',
+              )
+            this.restorePosition(_pos1)
+            break alt_ch0
+          }
           _alt0 = _ch0
           break found_alt0
         }
         alt_ch1: {
           const _pos2 = this.getPosition()
           const _ch1 = this.readChar(0x2d) // "-"
-          if (_ch1 === null) { if (this.getPosition() !== _pos2) throw new Error('LL(1) violation: alternative consumed input up to position ' + this.getPosition() + ' before failing (started at ' + _pos2 + ') — two alternatives share a common prefix'); this.restorePosition(_pos2); break alt_ch1 }
+          if (_ch1 === null) {
+            if (this.getPosition() !== _pos2)
+              throw new Error(
+                'LL(1) violation: alternative consumed input up to position ' +
+                  this.getPosition() +
+                  ' before failing (started at ' +
+                  _pos2 +
+                  ') — two alternatives share a common prefix',
+              )
+            this.restorePosition(_pos2)
+            break alt_ch1
+          }
           _alt0 = _ch1
           break found_alt0
         }
-        { this.restorePosition(_pos0); break loop_seq0 }
+        {
+          this.restorePosition(_pos0)
+          break loop_seq0
+        }
       }
       const _wsp2 = this.#parse_wsp()
-      if (_wsp2 === null) { this.restorePosition(_pos0); break loop_seq0 }
+      if (_wsp2 === null) {
+        this.restorePosition(_pos0)
+        break loop_seq0
+      }
       const _term1 = this.#parse_term()
-      if (_term1 === null) { this.restorePosition(_pos0); break loop_seq0 }
+      if (_term1 === null) {
+        this.restorePosition(_pos0)
+        break loop_seq0
+      }
       const _seq0 = { wsp0: _wsp1, item1: _alt0, wsp1: _wsp2, term: _term1 }
       _seqs0.push(_seq0)
     }
@@ -76,30 +111,64 @@ export class ArithParser extends RDParser {
     loop_seq0: while (true) {
       const _pos0 = this.getPosition()
       const _wsp0 = this.#parse_wsp()
-      if (_wsp0 === null) { this.restorePosition(_pos0); break loop_seq0 }
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      if (_wsp0 === null) {
+        this.restorePosition(_pos0)
+        break loop_seq0
+      }
+
       let _alt0!: string
       found_alt0: {
         alt_ch0: {
           const _pos1 = this.getPosition()
           const _ch0 = this.readChar(0x2a) // "*"
-          if (_ch0 === null) { if (this.getPosition() !== _pos1) throw new Error('LL(1) violation: alternative consumed input up to position ' + this.getPosition() + ' before failing (started at ' + _pos1 + ') — two alternatives share a common prefix'); this.restorePosition(_pos1); break alt_ch0 }
+          if (_ch0 === null) {
+            if (this.getPosition() !== _pos1)
+              throw new Error(
+                'LL(1) violation: alternative consumed input up to position ' +
+                  this.getPosition() +
+                  ' before failing (started at ' +
+                  _pos1 +
+                  ') — two alternatives share a common prefix',
+              )
+            this.restorePosition(_pos1)
+            break alt_ch0
+          }
           _alt0 = _ch0
           break found_alt0
         }
         alt_ch1: {
           const _pos2 = this.getPosition()
           const _ch1 = this.readChar(0x2f) // "/"
-          if (_ch1 === null) { if (this.getPosition() !== _pos2) throw new Error('LL(1) violation: alternative consumed input up to position ' + this.getPosition() + ' before failing (started at ' + _pos2 + ') — two alternatives share a common prefix'); this.restorePosition(_pos2); break alt_ch1 }
+          if (_ch1 === null) {
+            if (this.getPosition() !== _pos2)
+              throw new Error(
+                'LL(1) violation: alternative consumed input up to position ' +
+                  this.getPosition() +
+                  ' before failing (started at ' +
+                  _pos2 +
+                  ') — two alternatives share a common prefix',
+              )
+            this.restorePosition(_pos2)
+            break alt_ch1
+          }
           _alt0 = _ch1
           break found_alt0
         }
-        { this.restorePosition(_pos0); break loop_seq0 }
+        {
+          this.restorePosition(_pos0)
+          break loop_seq0
+        }
       }
       const _wsp1 = this.#parse_wsp()
-      if (_wsp1 === null) { this.restorePosition(_pos0); break loop_seq0 }
+      if (_wsp1 === null) {
+        this.restorePosition(_pos0)
+        break loop_seq0
+      }
       const _factor1 = this.#parse_factor()
-      if (_factor1 === null) { this.restorePosition(_pos0); break loop_seq0 }
+      if (_factor1 === null) {
+        this.restorePosition(_pos0)
+        break loop_seq0
+      }
       const _seq0 = { wsp0: _wsp0, item1: _alt0, wsp1: _wsp1, factor: _factor1 }
       _seqs0.push(_seq0)
     }
@@ -108,17 +177,50 @@ export class ArithParser extends RDParser {
 
   #parse_factor(): FactorNode | null {
     const start = this.getPosition()
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+
     let _alt0!: { item0: string; expr: ExprNode; item2: string } | NumberNode
     found_alt0: {
       alt_seq0: {
         const _pos0 = this.getPosition()
         const _ch0 = this.readChar(0x28) // "("
-        if (_ch0 === null) { if (this.getPosition() !== _pos0) throw new Error('LL(1) violation: alternative consumed input up to position ' + this.getPosition() + ' before failing (started at ' + _pos0 + ') — two alternatives share a common prefix'); this.restorePosition(_pos0); break alt_seq0 }
+        if (_ch0 === null) {
+          if (this.getPosition() !== _pos0)
+            throw new Error(
+              'LL(1) violation: alternative consumed input up to position ' +
+                this.getPosition() +
+                ' before failing (started at ' +
+                _pos0 +
+                ') — two alternatives share a common prefix',
+            )
+          this.restorePosition(_pos0)
+          break alt_seq0
+        }
         const _expr0 = this.#parse_expr()
-        if (_expr0 === null) { if (this.getPosition() !== _pos0) throw new Error('LL(1) violation: alternative consumed input up to position ' + this.getPosition() + ' before failing (started at ' + _pos0 + ') — two alternatives share a common prefix'); this.restorePosition(_pos0); break alt_seq0 }
+        if (_expr0 === null) {
+          if (this.getPosition() !== _pos0)
+            throw new Error(
+              'LL(1) violation: alternative consumed input up to position ' +
+                this.getPosition() +
+                ' before failing (started at ' +
+                _pos0 +
+                ') — two alternatives share a common prefix',
+            )
+          this.restorePosition(_pos0)
+          break alt_seq0
+        }
         const _ch1 = this.readChar(0x29) // ")"
-        if (_ch1 === null) { if (this.getPosition() !== _pos0) throw new Error('LL(1) violation: alternative consumed input up to position ' + this.getPosition() + ' before failing (started at ' + _pos0 + ') — two alternatives share a common prefix'); this.restorePosition(_pos0); break alt_seq0 }
+        if (_ch1 === null) {
+          if (this.getPosition() !== _pos0)
+            throw new Error(
+              'LL(1) violation: alternative consumed input up to position ' +
+                this.getPosition() +
+                ' before failing (started at ' +
+                _pos0 +
+                ') — two alternatives share a common prefix',
+            )
+          this.restorePosition(_pos0)
+          break alt_seq0
+        }
         const _seq0 = { item0: _ch0, expr: _expr0, item2: _ch1 }
         _alt0 = _seq0
         break found_alt0
@@ -126,7 +228,18 @@ export class ArithParser extends RDParser {
       alt_number0: {
         const _pos1 = this.getPosition()
         const _number0 = this.#parse_number()
-        if (_number0 === null) { if (this.getPosition() !== _pos1) throw new Error('LL(1) violation: alternative consumed input up to position ' + this.getPosition() + ' before failing (started at ' + _pos1 + ') — two alternatives share a common prefix'); this.restorePosition(_pos1); break alt_number0 }
+        if (_number0 === null) {
+          if (this.getPosition() !== _pos1)
+            throw new Error(
+              'LL(1) violation: alternative consumed input up to position ' +
+                this.getPosition() +
+                ' before failing (started at ' +
+                _pos1 +
+                ') — two alternatives share a common prefix',
+            )
+          this.restorePosition(_pos1)
+          break alt_number0
+        }
         _alt0 = _number0
         break found_alt0
       }
@@ -143,7 +256,10 @@ export class ArithParser extends RDParser {
     loop_digit0: while (true) {
       const _pos0 = this.getPosition()
       const _digit1 = this.#parse_digit()
-      if (_digit1 === null) { this.restorePosition(_pos0); break loop_digit0 }
+      if (_digit1 === null) {
+        this.restorePosition(_pos0)
+        break loop_digit0
+      }
       _digits0.push(_digit1)
     }
     return { kind: 'Number', digit: _digit0, item1: _digits0 }
@@ -151,76 +267,186 @@ export class ArithParser extends RDParser {
 
   #parse_digit(): DigitNode | null {
     const start = this.getPosition()
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+
     let _alt0!: string
     found_alt0: {
       alt_ch0: {
         const _pos0 = this.getPosition()
         const _ch0 = this.readChar(0x30) // "0"
-        if (_ch0 === null) { if (this.getPosition() !== _pos0) throw new Error('LL(1) violation: alternative consumed input up to position ' + this.getPosition() + ' before failing (started at ' + _pos0 + ') — two alternatives share a common prefix'); this.restorePosition(_pos0); break alt_ch0 }
+        if (_ch0 === null) {
+          if (this.getPosition() !== _pos0)
+            throw new Error(
+              'LL(1) violation: alternative consumed input up to position ' +
+                this.getPosition() +
+                ' before failing (started at ' +
+                _pos0 +
+                ') — two alternatives share a common prefix',
+            )
+          this.restorePosition(_pos0)
+          break alt_ch0
+        }
         _alt0 = _ch0
         break found_alt0
       }
       alt_ch1: {
         const _pos1 = this.getPosition()
         const _ch1 = this.readChar(0x31) // "1"
-        if (_ch1 === null) { if (this.getPosition() !== _pos1) throw new Error('LL(1) violation: alternative consumed input up to position ' + this.getPosition() + ' before failing (started at ' + _pos1 + ') — two alternatives share a common prefix'); this.restorePosition(_pos1); break alt_ch1 }
+        if (_ch1 === null) {
+          if (this.getPosition() !== _pos1)
+            throw new Error(
+              'LL(1) violation: alternative consumed input up to position ' +
+                this.getPosition() +
+                ' before failing (started at ' +
+                _pos1 +
+                ') — two alternatives share a common prefix',
+            )
+          this.restorePosition(_pos1)
+          break alt_ch1
+        }
         _alt0 = _ch1
         break found_alt0
       }
       alt_ch2: {
         const _pos2 = this.getPosition()
         const _ch2 = this.readChar(0x32) // "2"
-        if (_ch2 === null) { if (this.getPosition() !== _pos2) throw new Error('LL(1) violation: alternative consumed input up to position ' + this.getPosition() + ' before failing (started at ' + _pos2 + ') — two alternatives share a common prefix'); this.restorePosition(_pos2); break alt_ch2 }
+        if (_ch2 === null) {
+          if (this.getPosition() !== _pos2)
+            throw new Error(
+              'LL(1) violation: alternative consumed input up to position ' +
+                this.getPosition() +
+                ' before failing (started at ' +
+                _pos2 +
+                ') — two alternatives share a common prefix',
+            )
+          this.restorePosition(_pos2)
+          break alt_ch2
+        }
         _alt0 = _ch2
         break found_alt0
       }
       alt_ch3: {
         const _pos3 = this.getPosition()
         const _ch3 = this.readChar(0x33) // "3"
-        if (_ch3 === null) { if (this.getPosition() !== _pos3) throw new Error('LL(1) violation: alternative consumed input up to position ' + this.getPosition() + ' before failing (started at ' + _pos3 + ') — two alternatives share a common prefix'); this.restorePosition(_pos3); break alt_ch3 }
+        if (_ch3 === null) {
+          if (this.getPosition() !== _pos3)
+            throw new Error(
+              'LL(1) violation: alternative consumed input up to position ' +
+                this.getPosition() +
+                ' before failing (started at ' +
+                _pos3 +
+                ') — two alternatives share a common prefix',
+            )
+          this.restorePosition(_pos3)
+          break alt_ch3
+        }
         _alt0 = _ch3
         break found_alt0
       }
       alt_ch4: {
         const _pos4 = this.getPosition()
         const _ch4 = this.readChar(0x34) // "4"
-        if (_ch4 === null) { if (this.getPosition() !== _pos4) throw new Error('LL(1) violation: alternative consumed input up to position ' + this.getPosition() + ' before failing (started at ' + _pos4 + ') — two alternatives share a common prefix'); this.restorePosition(_pos4); break alt_ch4 }
+        if (_ch4 === null) {
+          if (this.getPosition() !== _pos4)
+            throw new Error(
+              'LL(1) violation: alternative consumed input up to position ' +
+                this.getPosition() +
+                ' before failing (started at ' +
+                _pos4 +
+                ') — two alternatives share a common prefix',
+            )
+          this.restorePosition(_pos4)
+          break alt_ch4
+        }
         _alt0 = _ch4
         break found_alt0
       }
       alt_ch5: {
         const _pos5 = this.getPosition()
         const _ch5 = this.readChar(0x35) // "5"
-        if (_ch5 === null) { if (this.getPosition() !== _pos5) throw new Error('LL(1) violation: alternative consumed input up to position ' + this.getPosition() + ' before failing (started at ' + _pos5 + ') — two alternatives share a common prefix'); this.restorePosition(_pos5); break alt_ch5 }
+        if (_ch5 === null) {
+          if (this.getPosition() !== _pos5)
+            throw new Error(
+              'LL(1) violation: alternative consumed input up to position ' +
+                this.getPosition() +
+                ' before failing (started at ' +
+                _pos5 +
+                ') — two alternatives share a common prefix',
+            )
+          this.restorePosition(_pos5)
+          break alt_ch5
+        }
         _alt0 = _ch5
         break found_alt0
       }
       alt_ch6: {
         const _pos6 = this.getPosition()
         const _ch6 = this.readChar(0x36) // "6"
-        if (_ch6 === null) { if (this.getPosition() !== _pos6) throw new Error('LL(1) violation: alternative consumed input up to position ' + this.getPosition() + ' before failing (started at ' + _pos6 + ') — two alternatives share a common prefix'); this.restorePosition(_pos6); break alt_ch6 }
+        if (_ch6 === null) {
+          if (this.getPosition() !== _pos6)
+            throw new Error(
+              'LL(1) violation: alternative consumed input up to position ' +
+                this.getPosition() +
+                ' before failing (started at ' +
+                _pos6 +
+                ') — two alternatives share a common prefix',
+            )
+          this.restorePosition(_pos6)
+          break alt_ch6
+        }
         _alt0 = _ch6
         break found_alt0
       }
       alt_ch7: {
         const _pos7 = this.getPosition()
         const _ch7 = this.readChar(0x37) // "7"
-        if (_ch7 === null) { if (this.getPosition() !== _pos7) throw new Error('LL(1) violation: alternative consumed input up to position ' + this.getPosition() + ' before failing (started at ' + _pos7 + ') — two alternatives share a common prefix'); this.restorePosition(_pos7); break alt_ch7 }
+        if (_ch7 === null) {
+          if (this.getPosition() !== _pos7)
+            throw new Error(
+              'LL(1) violation: alternative consumed input up to position ' +
+                this.getPosition() +
+                ' before failing (started at ' +
+                _pos7 +
+                ') — two alternatives share a common prefix',
+            )
+          this.restorePosition(_pos7)
+          break alt_ch7
+        }
         _alt0 = _ch7
         break found_alt0
       }
       alt_ch8: {
         const _pos8 = this.getPosition()
         const _ch8 = this.readChar(0x38) // "8"
-        if (_ch8 === null) { if (this.getPosition() !== _pos8) throw new Error('LL(1) violation: alternative consumed input up to position ' + this.getPosition() + ' before failing (started at ' + _pos8 + ') — two alternatives share a common prefix'); this.restorePosition(_pos8); break alt_ch8 }
+        if (_ch8 === null) {
+          if (this.getPosition() !== _pos8)
+            throw new Error(
+              'LL(1) violation: alternative consumed input up to position ' +
+                this.getPosition() +
+                ' before failing (started at ' +
+                _pos8 +
+                ') — two alternatives share a common prefix',
+            )
+          this.restorePosition(_pos8)
+          break alt_ch8
+        }
         _alt0 = _ch8
         break found_alt0
       }
       alt_ch9: {
         const _pos9 = this.getPosition()
         const _ch9 = this.readChar(0x39) // "9"
-        if (_ch9 === null) { if (this.getPosition() !== _pos9) throw new Error('LL(1) violation: alternative consumed input up to position ' + this.getPosition() + ' before failing (started at ' + _pos9 + ') — two alternatives share a common prefix'); this.restorePosition(_pos9); break alt_ch9 }
+        if (_ch9 === null) {
+          if (this.getPosition() !== _pos9)
+            throw new Error(
+              'LL(1) violation: alternative consumed input up to position ' +
+                this.getPosition() +
+                ' before failing (started at ' +
+                _pos9 +
+                ') — two alternatives share a common prefix',
+            )
+          this.restorePosition(_pos9)
+          break alt_ch9
+        }
         _alt0 = _ch9
         break found_alt0
       }
@@ -230,12 +456,16 @@ export class ArithParser extends RDParser {
   }
 
   #parse_wsp(): WspNode | null {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const start = this.getPosition()
     const _chs0: string[] = []
     loop_ch0: while (true) {
       const _pos0 = this.getPosition()
       const _ch0 = this.readChar(0x20) // " "
-      if (_ch0 === null) { this.restorePosition(_pos0); break loop_ch0 }
+      if (_ch0 === null) {
+        this.restorePosition(_pos0)
+        break loop_ch0
+      }
       _chs0.push(_ch0)
     }
     return { kind: 'wsp', item0: _chs0 }
@@ -286,13 +516,7 @@ export type WspNode = {
   item0: string[]
 }
 
-export type ArithTree =
-  | ExprNode
-  | TermNode
-  | FactorNode
-  | NumberNode
-  | DigitNode
-  | WspNode
+export type ArithTree = ExprNode | TermNode | FactorNode | NumberNode | DigitNode | WspNode
 
 export function childNodes(node: ArithTree): ArithTree[] {
   const children: ArithTree[] = []
@@ -331,8 +555,10 @@ export function childNodes(node: ArithTree): ArithTree[] {
       children.push(...node.item1)
       break
     }
-    case 'Digit': break
-    case 'wsp': break
+    case 'Digit':
+      break
+    case 'wsp':
+      break
   }
   return children
 }
