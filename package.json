@@ -73,7 +73,7 @@
     "build": "tsc -p tsconfig.cjs.json && tsc -p tsconfig.esm.json",
     "test": "node --experimental-vm-modules --no-warnings=ExperimentalWarning node_modules/.bin/jest",
     "lint": "eslint src docs-site/src",
-    "docs": "tsx docs-site/scripts/render-site-header.tsx && typedoc",
+    "docs": "npm --prefix docs-site run render-header && npx --prefix docs-site typedoc",
     "prepare": "husky",
     "generate": "node dist/esm/cli/rdp-gen.js",
     "generate:meta": "mkdir -p src/parsers/generated && node dist/esm/cli/rdp-gen.js src/grammars/ebnf-meta.ebnf --parser-name EBNFInEBNFParser --output src/parsers/generated/ebnf-in-ebnf-parser.ts && node dist/esm/cli/rdp-gen.js src/grammars/ebnf-meta.abnf --parser-name EBNFInABNFParser --output src/parsers/generated/ebnf-in-abnf-parser.ts && node dist/esm/cli/rdp-gen.js src/grammars/abnf-meta.ebnf --parser-name ABNFInEBNFParser --output src/parsers/generated/abnf-in-ebnf-parser.ts && node dist/esm/cli/rdp-gen.js src/grammars/abnf-meta.abnf --parser-name ABNFInABNFParser --output src/parsers/generated/abnf-in-abnf-parser.ts",
@@ -93,11 +93,7 @@
     "lint-staged": "^16.4.0",
     "prettier": "^3.8.3",
     "ts-jest": "^29.4.9",
-    "typedoc": "^0.28.19",
     "typescript": "^6.0.2",
-    "react": "^18.2.0",
-    "react-dom": "^19.2.5",
-    "tsx": "^4.19.0",
     "typescript-eslint": "^8.58.2"
   }
 }
