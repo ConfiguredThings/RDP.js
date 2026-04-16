@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0]
+
 ### Added
 
 - `src/grammars/arith.ebnf` — canonical arithmetic expression grammar (with whitespace handling, operator precedence, and parenthesised sub-expressions) used throughout worked examples; exported as `arithEBNF` from `@configuredthings/rdp.js/grammars`
@@ -62,6 +64,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bootstrapping meta-grammars: EBNF and ABNF formats each described in both EBNF and ABNF (`src/grammars/`)
 - Left-recursion detection at grammar compilation time
 
-[unreleased]: https://github.com/ConfiguredThings/RDP.js/compare/v0.2.0...HEAD
+[unreleased]: https://github.com/ConfiguredThings/RDP.js/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/ConfiguredThings/RDP.js/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/ConfiguredThings/RDP.js/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/ConfiguredThings/RDP.js/releases/tag/v0.1.0
