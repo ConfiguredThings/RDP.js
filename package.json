@@ -79,9 +79,6 @@
     "generate:meta": "mkdir -p src/parsers/generated && node dist/esm/cli/rdp-gen.js src/grammars/ebnf-meta.ebnf --parser-name EBNFInEBNFParser --output src/parsers/generated/ebnf-in-ebnf-parser.ts && node dist/esm/cli/rdp-gen.js src/grammars/ebnf-meta.abnf --parser-name EBNFInABNFParser --output src/parsers/generated/ebnf-in-abnf-parser.ts && node dist/esm/cli/rdp-gen.js src/grammars/abnf-meta.ebnf --parser-name ABNFInEBNFParser --output src/parsers/generated/abnf-in-ebnf-parser.ts && node dist/esm/cli/rdp-gen.js src/grammars/abnf-meta.abnf --parser-name ABNFInABNFParser --output src/parsers/generated/abnf-in-abnf-parser.ts",
     "prepublishOnly": "git diff-files --quiet"
   },
-  "dependencies": {
-    "commander": "^14.0.3"
-  },
   "devDependencies": {
     "@types/jest": "^30.0.0",
     "@types/node": "^25.6.0",
