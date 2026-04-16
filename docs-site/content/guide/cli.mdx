@@ -74,12 +74,14 @@ rdp-gen protocol.abnf --format abnf --parser-name FrameParser
 rdp-gen init [options]
 ```
 
-Creates a `package.json` and `tsconfig.json` in the current directory with all
-required compiler options pre-configured.
+Creates a `package.json`, `tsconfig.json`, and a starter `src/<ClassName>.ts` in
+the current directory — everything needed to start writing a hand-crafted parser
+that compiles immediately.
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `--name <name>` | `my-parser` | npm package name for the scaffolded project |
+| `--name <name>` | `my-parser` | npm package name; also determines the class name (`my-parser` → `MyParser`) |
+| `--observable` | off | Extend `ObservableRDParser` instead of `RDParser` |
 
 #### Example
 
@@ -87,7 +89,22 @@ required compiler options pre-configured.
 mkdir my-parser && cd my-parser
 rdp-gen init --name my-parser
 npm install
+npm run build   # compiles src/MyParser.ts → dist/
 ```
+
+The starter `src/MyParser.ts` includes the private-constructor / static-`parse`
+boilerplate and a `#parseRoot()` stub with inline guidance on which methods to use.
+
+To scaffold an observable parser with built-in tracing support:
+
+```bash
+rdp-gen init --name my-parser --observable
+```
+
+The observable variant extends `ObservableRDParser`, adds `notifyEnter`/`notifyExit`
+call sites in the stub, and exposes an optional `ParseObserver` parameter in
+`static parse()` so a `TraceObserver` or `DebugObserver` can be attached at call
+time without modifying the parser itself.
 
 The scaffolded `tsconfig.json` includes:
 
@@ -102,10 +119,10 @@ The scaffolded `tsconfig.json` includes:
 }
 ```
 
-These options are **required** — the generated parser uses native `#` private
-fields (`target: ES2022`), is verified to compile cleanly under strict null checks
-(`strict: true`, `noUncheckedIndexedAccess: true`), and needs the package exports
-map (`moduleResolution: node16` or `bundler`).
+These options are **required** — the parser uses native `#` private fields
+(`target: ES2022`), is written to strict null-check standards (`strict: true`,
+`noUncheckedIndexedAccess: true`), and needs the package exports map
+(`moduleResolution: node16` or `bundler`).
 
 ---
 

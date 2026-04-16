@@ -6,7 +6,7 @@
  */
 
 import { Command } from 'commander'
-import { readFileSync, writeFileSync, existsSync } from 'node:fs'
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { generateParser } from '../generator/index.js'
 import { EBNFParser } from '../generator/ebnf-parser.js'
@@ -88,15 +88,26 @@ program
 // rdp-gen init — scaffold a new parser project
 program
   .command('init')
-  .description('Scaffold a new RDParser project with package.json and tsconfig.json')
+  .description(
+    'Scaffold a new RDParser project with package.json, tsconfig.json, and a starter parser',
+  )
   .option('--name <name>', 'npm package name for the scaffolded project', 'my-parser')
-  .action((options: { name: string }) => {
+  .option(
+    '--observable',
+    'extend ObservableRDParser; starter includes notifyEnter/notifyExit calls',
+  )
+  .action((options: { name: string; observable?: boolean }) => {
+    const className = options.name
+      .split('-')
+      .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
+      .join('')
+    const srcFile = `src/${className}.ts`
     const pkgPath = 'package.json'
     const tscPath = 'tsconfig.json'
 
-    if (existsSync(pkgPath) || existsSync(tscPath)) {
+    if (existsSync(pkgPath) || existsSync(tscPath) || existsSync(srcFile)) {
       console.error(
-        `rdp-gen init: ${pkgPath} or ${tscPath} already exists. Aborting to avoid overwriting.`,
+        `rdp-gen init: ${pkgPath}, ${tscPath}, or ${srcFile} already exists. Aborting to avoid overwriting.`,
       )
       process.exit(1)
     }
@@ -106,9 +117,7 @@ program
       version: '0.1.0',
       type: 'module',
       scripts: {
-        generate:
-          'rdp-gen grammar.ebnf --parser-name GeneratedParser --output src/generatedParser.ts',
-        build: 'npm run generate && tsc',
+        build: 'tsc',
       },
       dependencies: {
         '@configuredthings/rdp.js': `^${version}`,
@@ -130,9 +139,66 @@ program
       exclude: ['node_modules', 'dist'],
     }
 
+    const parserTemplate = options.observable
+      ? `\
+import { ObservableRDParser, ParseObserver } from '@configuredthings/rdp.js/observable'
+
+export class ${className} extends ObservableRDParser {
+  private constructor(source: DataView) {
+    super(source)
+  }
+
+  static parse(input: string, observer?: ParseObserver): unknown {
+    const bytes = new TextEncoder().encode(input)
+    const parser = new ${className}(new DataView(bytes.buffer))
+    if (observer !== undefined) parser.withObserver(observer)
+    return parser.#parseRoot()
+  }
+
+  #parseRoot(): unknown {
+    this.notifyEnter('root')
+    // TODO: implement your top-level production rule.
+    // Add private methods for each grammar rule, e.g. #parseExpression(), #parseTerm().
+    // Use this.peek(), this.matchChar(), this.expectChar(), this.readChar(), this.atEnd(), etc.
+    // Call this.error() to signal a parse failure at the current position.
+    // Call this.notifyEnter(name) at the top and this.notifyExit(name, matched) before each return.
+    if (!this.atEnd()) this.error('unexpected input')
+    this.notifyExit('root', false)
+    throw new Error('not implemented')
+  }
+}
+`
+      : `\
+import { RDParser } from '@configuredthings/rdp.js'
+
+export class ${className} extends RDParser {
+  private constructor(source: DataView) {
+    super(source)
+  }
+
+  static parse(input: string): unknown {
+    const bytes = new TextEncoder().encode(input)
+    return new ${className}(new DataView(bytes.buffer)).#parseRoot()
+  }
+
+  #parseRoot(): unknown {
+    // TODO: implement your top-level production rule.
+    // Add private methods for each grammar rule, e.g. #parseExpression(), #parseTerm().
+    // Use this.peek(), this.matchChar(), this.expectChar(), this.readChar(), this.atEnd(), etc.
+    // Call this.error() to signal a parse failure at the current position.
+    if (!this.atEnd()) this.error('unexpected input')
+    throw new Error('not implemented')
+  }
+}
+`
+
+    mkdirSync('src', { recursive: true })
     writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n', 'utf-8')
     writeFileSync(tscPath, JSON.stringify(tsconfig, null, 2) + '\n', 'utf-8')
-    console.log(`Scaffolded ${pkgPath} and ${tscPath}. Run npm install to get started.`)
+    writeFileSync(srcFile, parserTemplate, 'utf-8')
+    console.log(
+      `Scaffolded ${pkgPath}, ${tscPath}, and ${srcFile}. Run npm install to get started.`,
+    )
   })
 
 program.parse()
