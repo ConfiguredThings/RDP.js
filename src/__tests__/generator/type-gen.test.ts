@@ -1,4 +1,4 @@
-import { generateTypes, typeForBody } from '../../generator/type-gen.js'
+import { generateTypes, generateWalker, typeForBody } from '../../generator/type-gen.js'
 import type { GrammarAST, RuleBody } from '../../generator/ast.js'
 
 const simpleAst: GrammarAST = {
@@ -161,5 +161,131 @@ describe('typeForBody', () => {
     expect(typeForBody({ kind: 'repetition', min: 0, max: 5, item: mixedAlt })).toBe(
       '(string | FooNode)[]',
     )
+  })
+})
+
+describe('generateWalker', () => {
+  it('emits a childNodes function', () => {
+    const output = generateWalker(simpleAst)
+    expect(output).toContain('function childNodes')
+  })
+
+  it('uses the custom treeName when provided', () => {
+    const output = generateWalker(simpleAst, { treeName: 'MyTree' })
+    expect(output).toContain('childNodes(node: MyTree): MyTree[]')
+  })
+
+  it('emits a leaf case (break, no push) for a rule with no non-terminal fields', () => {
+    // greeting = 'hello' — terminal only, no child nodes
+    const output = generateWalker(simpleAst)
+    expect(output).toContain("case 'greeting': break")
+    expect(output).not.toContain('children.push')
+  })
+
+  it('emits children.push for a rule with a direct non-terminal field', () => {
+    const ast: GrammarAST = {
+      rules: [
+        { name: 'wrapper', body: { kind: 'nonTerminal', name: 'inner' } },
+        { name: 'inner', body: { kind: 'terminal', value: 'x' } },
+      ],
+    }
+    const output = generateWalker(ast)
+    expect(output).toContain('children.push(node.inner)')
+  })
+
+  it('emits a spread push for a zeroOrMore of non-terminals', () => {
+    const ast: GrammarAST = {
+      rules: [
+        {
+          name: 'list',
+          body: { kind: 'zeroOrMore', item: { kind: 'nonTerminal', name: 'item' } },
+        },
+        { name: 'item', body: { kind: 'terminal', value: 'x' } },
+      ],
+    }
+    const output = generateWalker(ast)
+    expect(output).toContain('children.push(...node.item0)')
+  })
+
+  it('emits a for-of loop for a zeroOrMore of sequences containing non-terminals', () => {
+    // Expr = Term, {('+' | '-'), Term} — item1 is an array of sequences
+    const ast: GrammarAST = {
+      rules: [
+        {
+          name: 'expr',
+          body: {
+            kind: 'sequence',
+            items: [
+              { kind: 'nonTerminal', name: 'term' },
+              {
+                kind: 'zeroOrMore',
+                item: {
+                  kind: 'sequence',
+                  items: [
+                    {
+                      kind: 'alternation',
+                      items: [
+                        { kind: 'terminal', value: '+' },
+                        { kind: 'terminal', value: '-' },
+                      ],
+                    },
+                    { kind: 'nonTerminal', name: 'term' },
+                  ],
+                },
+              },
+            ],
+          },
+        },
+        { name: 'term', body: { kind: 'terminal', value: 'x' } },
+      ],
+    }
+    const output = generateWalker(ast)
+    expect(output).toContain('children.push(node.term)')
+    expect(output).toContain('for (const _item0 of node.item1)')
+    expect(output).toContain('children.push(_item0.term)')
+  })
+
+  it('emits a null-guard for an optional non-terminal field', () => {
+    const ast: GrammarAST = {
+      rules: [
+        {
+          name: 'maybe',
+          body: { kind: 'optional', item: { kind: 'nonTerminal', name: 'inner' } },
+        },
+        { name: 'inner', body: { kind: 'terminal', value: 'x' } },
+      ],
+    }
+    const output = generateWalker(ast)
+    expect(output).toContain('if (node.item0 !== null) children.push(node.item0)')
+  })
+
+  it('emits a typeof guard for an alternation mixing non-terminals and strings', () => {
+    // Factor = '(' Expr ')' | Number — item0 is a sequence-or-node union
+    const ast: GrammarAST = {
+      rules: [
+        {
+          name: 'factor',
+          body: {
+            kind: 'alternation',
+            items: [
+              {
+                kind: 'sequence',
+                items: [
+                  { kind: 'terminal', value: '(' },
+                  { kind: 'nonTerminal', name: 'expr' },
+                  { kind: 'terminal', value: ')' },
+                ],
+              },
+              { kind: 'nonTerminal', name: 'number' },
+            ],
+          },
+        },
+        { name: 'expr', body: { kind: 'terminal', value: 'x' } },
+        { name: 'number', body: { kind: 'terminal', value: 'x' } },
+      ],
+    }
+    const output = generateWalker(ast)
+    // Should discriminate using 'kind' in check
+    expect(output).toContain("'kind' in")
   })
 })

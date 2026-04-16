@@ -3,6 +3,7 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import { generateParser } from '../../generator/codegen.js'
 import { RDParserException } from '../../exception.js'
+import { compileAndImport, nav } from '../../__testUtils__/generator-runtime.js'
 
 // ── TypeScript strict-typing helper ──────────────────────────────────────────
 
@@ -321,5 +322,125 @@ describe('generateParser — emitted code passes strict TypeScript type-checking
   it('ABNF bounded repetition compiles cleanly', () => {
     const output = generateParser(`rule = 2*4"a"`, { format: 'abnf' })
     expect(typeCheck(output)).toEqual([])
+  })
+
+  it('walker: true emits childNodes and the output compiles cleanly', () => {
+    const output = generateParser(
+      `Expr = Term, {('+' | '-'), Term};\nTerm = Factor, {('*' | '/'), Factor};\nFactor = '(', Expr, ')' | Number;\nNumber = Digit, {Digit};\nDigit = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9';`,
+      { parserName: 'ExprParser', walker: true },
+    )
+    expect(output).toContain('function childNodes')
+    expect(typeCheck(output)).toEqual([])
+  })
+})
+
+// ── Runtime correctness ──────────────────────────────────────────────────────
+//
+// The grammar below covers: sequence, alternation, zeroOrMore, optional (via
+// the '(' Expr ')' branch), and non-terminal references — enough surface area
+// to catch structural bugs in any generated parser or walker.
+
+const EXPR_GRAMMAR = `Expr = Term, {('+' | '-'), Term};\nTerm = Factor, {('*' | '/'), Factor};\nFactor = '(', Expr, ')' | Number;\nNumber = Digit, {Digit};\nDigit = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9';`
+
+// ── Generated parser — runtime correctness ───────────────────────────────────
+
+describe('generated parser — runtime correctness', () => {
+  let ExprParser!: { parse(s: string): unknown }
+
+  beforeAll(async () => {
+    const source = generateParser(EXPR_GRAMMAR, { parserName: 'ExprParser', walker: true })
+    const { ExprParser: Ep } = await compileAndImport(source)
+    ExprParser = Ep as { parse(s: string): unknown }
+  })
+
+  it('root node has kind "Expr"', () => {
+    expect(nav(ExprParser.parse('1'), 'kind')).toBe('Expr')
+  })
+
+  it('parses a single digit — DigitNode.item0 holds the matched character', () => {
+    // Expr → Term → Factor.item0 (NumberNode) → Number.digit (DigitNode) → .item0
+    expect(nav(ExprParser.parse('9'), 'term', 'factor', 'item0', 'digit', 'item0')).toBe('9')
+  })
+
+  it('parses a two-digit number — NumberNode.item1 holds subsequent DigitNodes', () => {
+    // Number = Digit, {Digit}  →  { digit: DigitNode; item1: DigitNode[] }
+    const number = nav(ExprParser.parse('42'), 'term', 'factor', 'item0')
+    expect(nav(number, 'kind')).toBe('Number')
+    expect(nav(number, 'digit', 'item0')).toBe('4')
+    expect(nav(number, 'item1', '0', 'item0')).toBe('2')
+  })
+
+  it('parses "1+2" — ExprNode.item1 records the operator and right-hand Term', () => {
+    // Expr = Term, {('+' | '-'), Term}  →  item1: { item0: string; term: TermNode }[]
+    const pairs = nav(ExprParser.parse('1+2'), 'item1') as unknown[]
+    expect(pairs).toHaveLength(1)
+    expect(nav(pairs[0], 'item0')).toBe('+')
+    expect(nav(pairs[0], 'term', 'kind')).toBe('Term')
+  })
+
+  it('throws on a non-digit character', () => {
+    expect(() => ExprParser.parse('x')).toThrow()
+  })
+
+  it('throws on empty input', () => {
+    expect(() => ExprParser.parse('')).toThrow()
+  })
+
+  it('throws on a trailing operator with no right-hand operand', () => {
+    expect(() => ExprParser.parse('1+')).toThrow()
+  })
+})
+
+// ── Generated walker — runtime correctness ───────────────────────────────────
+
+describe('generated walker — runtime correctness', () => {
+  let ExprParser!: { parse(s: string): { kind: string } }
+  let childNodes!: (n: unknown) => { kind: string }[]
+
+  beforeAll(async () => {
+    const source = generateParser(EXPR_GRAMMAR, { parserName: 'ExprParser', walker: true })
+    const { ExprParser: Ep, childNodes: cn } = await compileAndImport(source)
+    ExprParser = Ep as { parse(s: string): { kind: string } }
+    childNodes = cn as (n: unknown) => { kind: string }[]
+  })
+
+  it('childNodes of the Expr root for "1+2" returns both Term children', () => {
+    const children = childNodes(ExprParser.parse('1+2'))
+    expect(children).toHaveLength(2)
+    expect(children[0]?.kind).toBe('Term')
+    expect(children[1]?.kind).toBe('Term')
+  })
+
+  it('childNodes of a Digit node (leaf) returns []', () => {
+    // Walk down: expr → term → factor → number → digit
+    const tree = ExprParser.parse('1')
+    const [term] = childNodes(tree)
+    const [factor] = childNodes(term)
+    const [number] = childNodes(factor)
+    const [digit] = childNodes(number)
+    expect(childNodes(digit)).toHaveLength(0)
+  })
+
+  it('BFS via childNodes visits every non-terminal node in "1+2"', () => {
+    // "1+2" → Expr → Term(1), Term(2) → Factor×2 → Number×2 → Digit×2
+    const visited: string[] = []
+    const queue: { kind: string }[] = [ExprParser.parse('1+2')]
+    while (queue.length > 0) {
+      const node = queue.shift()
+      if (node === undefined) break
+      visited.push(node.kind)
+      queue.push(...childNodes(node))
+    }
+    expect(visited).toEqual([
+      'Expr',
+      'Term',
+      'Term',
+      'Factor',
+      'Factor',
+      'Number',
+      'Number',
+      'Digit',
+      'Digit',
+    ])
   })
 })
