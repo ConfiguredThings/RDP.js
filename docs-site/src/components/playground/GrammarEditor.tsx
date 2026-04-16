@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import Editor from '@monaco-editor/react'
-import type { Monaco } from '@monaco-editor/react'
+import type { Monaco, OnMount } from '@monaco-editor/react'
 import { EBNFParser, ABNFParser, generateParser } from '@configuredthings/rdp.js/generator'
 import type { GrammarAST } from '@configuredthings/rdp.js/generator'
 import {
@@ -71,6 +71,29 @@ type ExampleKey =
   | 'ebnf-in-abnf'
   | 'abnf-in-ebnf'
   | 'abnf-in-abnf'
+
+// ── Live validation helpers ───────────────────────────────────────────────────
+
+/** Convert a byte offset in a UTF-8 string to a 1-based {lineNumber, column}. */
+function byteOffsetToLineCol(
+  source: string,
+  byteOffset: number,
+): { lineNumber: number; column: number } {
+  const encoded = new TextEncoder().encode(source)
+  const clamped = Math.min(byteOffset, encoded.length)
+  const textBefore = new TextDecoder().decode(encoded.slice(0, clamped))
+  const lines = textBefore.split('\n')
+  return {
+    lineNumber: lines.length,
+    column: (lines[lines.length - 1]?.length ?? 0) + 1,
+  }
+}
+
+/** Extract the byte offset from an RDParserException message. */
+function extractByteOffset(message: string): number | null {
+  const match = /at position (\d+)/.exec(message)
+  return match && match[1] !== undefined ? parseInt(match[1], 10) : null
+}
 
 // ── Monaco language registration ─────────────────────────────────────────────
 
@@ -146,6 +169,70 @@ export function GrammarEditor({ source, options, isCustom, onCompile, onReset }:
   const tsPanelMounted = useRef(false)
   if (generatedTs !== null) tsPanelMounted.current = true
 
+  // Refs for live validation via Monaco markers
+  type StandaloneEditor = Parameters<OnMount>[0]
+  const editorRef = useRef<StandaloneEditor | null>(null)
+  const monacoRef = useRef<Monaco | null>(null)
+
+  // Live syntax validation — runs as user types (debounced 300 ms)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const editor = editorRef.current
+      const monaco = monacoRef.current
+      if (!editor || !monaco) return
+      const model = editor.getModel()
+      if (!model) return
+
+      if (!draft.trim()) {
+        monaco.editor.setModelMarkers(model, 'grammar-lint', [])
+        return
+      }
+
+      try {
+        const ast =
+          opts.format === 'abnf'
+            ? ABNFParser.parse(draft, { caseSensitiveStrings: opts.caseSensitiveStrings })
+            : EBNFParser.parse(draft)
+
+        if (ast.rules.length === 0) {
+          monaco.editor.setModelMarkers(model, 'grammar-lint', [
+            {
+              startLineNumber: 1,
+              startColumn: 1,
+              endLineNumber: model.getLineCount(),
+              endColumn: model.getLineMaxColumn(model.getLineCount()),
+              message: 'Grammar has no rules.',
+              severity: monaco.MarkerSeverity.Warning,
+            },
+          ])
+        } else {
+          monaco.editor.setModelMarkers(model, 'grammar-lint', [])
+        }
+      } catch (e) {
+        const message = e instanceof Error ? e.message : String(e)
+        const byteOffset = extractByteOffset(message)
+        const { lineNumber, column } =
+          byteOffset !== null
+            ? byteOffsetToLineCol(draft, byteOffset)
+            : { lineNumber: 1, column: 1 }
+        const endColumn = Math.min(column + 1, model.getLineMaxColumn(lineNumber))
+
+        monaco.editor.setModelMarkers(model, 'grammar-lint', [
+          {
+            startLineNumber: lineNumber,
+            startColumn: column,
+            endLineNumber: lineNumber,
+            endColumn: endColumn,
+            message,
+            severity: monaco.MarkerSeverity.Error,
+          },
+        ])
+      }
+    }, 300)
+
+    return () => clearTimeout(timer)
+  }, [draft, opts])
+
   // Sync when parent resets
   useEffect(() => {
     setDraft(source)
@@ -161,6 +248,11 @@ export function GrammarEditor({ source, options, isCustom, onCompile, onReset }:
     setStatus({ kind: 'idle' })
     setGeneratedTs(null)
     tsPanelMounted.current = false
+    // Clear any stale markers from the previous format
+    if (editorRef.current && monacoRef.current) {
+      const model = editorRef.current.getModel()
+      if (model) monacoRef.current.editor.setModelMarkers(model, 'grammar-lint', [])
+    }
   }
 
   const handleCompile = useCallback(() => {
@@ -313,6 +405,10 @@ export function GrammarEditor({ source, options, isCustom, onCompile, onReset }:
                 setStatus({ kind: 'idle' })
               }}
               beforeMount={registerLanguages}
+              onMount={(editor, monaco) => {
+                editorRef.current = editor
+                monacoRef.current = monaco
+              }}
               options={{
                 automaticLayout: true,
                 minimap: { enabled: false },

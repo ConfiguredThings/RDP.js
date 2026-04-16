@@ -14,9 +14,12 @@ explains how that works.
 ### The data flow
 
 ```
-Grammar source text
+Grammar source text (on each keystroke, debounced 300 ms)
   → EBNFParser.parse() / ABNFParser.parse()
-  → GrammarAST
+  → on error: Monaco setModelMarkers → inline squiggles in editor
+  → on success: GrammarAST
+
+GrammarAST (on Compile)
   → GrammarInterpreter + TraceObserver
   → ParseEvent[]
   → Debug UI (step through, call stack, position highlight, trace log)
@@ -25,6 +28,37 @@ Grammar source text
 ![Playground data flow diagram showing grammar source feeding EBNFParser to produce a GrammarAST, which GrammarInterpreter consumes together with the test input to emit a ParseEvent array, which then drives four debug UI components: step debugger, call stack, position highlight, and trace log](/playground-data-flow.svg)
 
 Everything runs synchronously in the browser on each keystroke.
+
+### Live grammar validation
+
+As you type in the grammar editor, the playground validates your grammar
+continuously — 300 ms after each keystroke — using the same `EBNFParser` or
+`ABNFParser` that the **Compile** button invokes. Syntax errors appear as inline
+red squiggles directly in the editor, with the full error message on hover. No
+button press needed.
+
+```ts
+// runs on every change, debounced 300 ms
+const ast = EBNFParser.parse(draft)   // throws RDParserException on bad syntax
+```
+
+`RDParserException` messages always end with `at position N`, where `N` is the
+byte offset of the furthest point the parser reached before failing. The
+playground converts that offset to a Monaco line/column marker:
+
+```ts
+function byteOffsetToLineCol(source: string, byteOffset: number) {
+  const encoded   = new TextEncoder().encode(source)
+  const textBefore = new TextDecoder().decode(encoded.slice(0, byteOffset))
+  const lines = textBefore.split('\n')
+  return { lineNumber: lines.length, column: lines.at(-1)!.length + 1 }
+}
+```
+
+The marker is registered via Monaco's `editor.setModelMarkers` API under the
+owner key `'grammar-lint'`, so it is cleared automatically when the grammar
+becomes valid again. If the grammar parses successfully but contains no rules,
+a yellow warning marker spans the entire document instead.
 
 ### Step 1 — parse the grammar source into an AST
 
