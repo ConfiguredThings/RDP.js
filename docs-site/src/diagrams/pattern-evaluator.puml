@@ -1,0 +1,47 @@
+@startuml pattern-evaluator
+skinparam componentStyle rectangle
+skinparam defaultFontName monospace
+skinparam ArrowColor #2d4a70
+skinparam ArrowFontColor #2d4a70
+skinparam ArrowFontSize 10
+skinparam ComponentBorderColor #0056A3
+skinparam ComponentBorderThickness 1.5
+skinparam ComponentBackgroundColor #cce8ff
+skinparam PackageBorderColor #7aaacc
+skinparam PackageBorderThickness 1.5
+skinparam BackgroundColor transparent
+
+skinparam component<<key>> {
+  BackgroundColor #0056A3
+  FontColor white
+  BorderColor #003d7a
+}
+
+top to bottom direction
+
+() " string " as input
+() " number " as output
+
+package "evaluator  (mirrors grammar rules)" #eef3fa {
+  component "evaluate()" <<key>> as evaluate
+  component "evalExpr()" as evalExpr
+  component "evalTerm()" as evalTerm
+  component "evalFactor()" as evalFactor
+  component "evalNumber()" as evalNumber
+
+  evaluate -down-> evalExpr
+  evalExpr -down-> evalTerm
+  evalTerm -down-> evalFactor
+  evalFactor -down-> evalNumber
+  evalFactor -left-> evalExpr : (recursive)
+}
+
+input -down-> evaluate
+evaluate -right-> output
+
+note right of evalFactor
+  One function per
+  grammar rule
+end note
+
+@enduml

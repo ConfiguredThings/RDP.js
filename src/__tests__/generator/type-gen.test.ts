@@ -84,7 +84,7 @@ describe('typeForBody', () => {
     }
     const result = typeForBody(body)
     expect(result).toContain('item0: string')
-    expect(result).toContain('item1: ExprNode')
+    expect(result).toContain('expr: ExprNode')
   })
 
   it('returns a union type for an alternation', () => {

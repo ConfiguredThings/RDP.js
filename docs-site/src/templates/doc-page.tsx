@@ -3,6 +3,7 @@ import { graphql, Link, withPrefix, type PageProps, type HeadFC } from 'gatsby'
 import { MDXProvider } from '@mdx-js/react'
 import DocsSidebar from '../components/DocsSidebar'
 import { SiteHeader } from '../components/SiteHeader'
+import { DocRailroadDiagram } from '../components/DocRailroadDiagram'
 
 interface PageContext {
   id: string
@@ -20,6 +21,7 @@ const mdxComponents = {
   img: ({ src, alt, ...props }: React.ImgHTMLAttributes<HTMLImageElement>) => (
     <img src={src?.startsWith('/') ? withPrefix(src) : src} alt={alt} {...props} />
   ),
+  RailroadDiagram: DocRailroadDiagram,
 }
 
 export default function DocPageTemplate({
