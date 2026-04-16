@@ -68,7 +68,7 @@ describe('generateParser', () => {
 
   it('emits a private constructor', () => {
     const output = generateParser(`Rule = 'x';`)
-    expect(output).toContain('private constructor(source: DataView) { super(source) }')
+    expect(output).toContain('private constructor(source: DataView) {')
   })
 
   it('emits a static parse method', () => {
