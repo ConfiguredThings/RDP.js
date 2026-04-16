@@ -19,7 +19,7 @@ import type { GrammarAST, RuleBody, CoreRuleName } from './ast.js'
 import { EBNFParser } from './ebnf-parser.js'
 import { ABNFParser } from './abnf-parser.js'
 import { detectLeftRecursion } from './left-recursion.js'
-import { generateTypes, typeForBody, arrayType } from './type-gen.js'
+import { generateTypes, typeForBody, arrayType, inferFieldNames } from './type-gen.js'
 
 /** Options controlling what `generateParser` emits. */
 export type GeneratorOptions = {
@@ -91,9 +91,6 @@ export function generateParser(source: string, options: GeneratorOptions = {}): 
         })
       : EBNFParser.parse(source)
   detectLeftRecursion(ast)
-
-  // Reset counter for deterministic output per generateParser call
-  counter = 0
 
   const baseClass = observable ? 'ObservableRDParser' : 'RDParser'
   const importPath = observable ? '@configuredthings/rdp.js/observable' : '@configuredthings/rdp.js'
@@ -195,14 +192,23 @@ export function generateParser(source: string, options: GeneratorOptions = {}): 
   return lines.join('\n')
 }
 
-// ── Counter ───────────────────────────────────────────────────────────────────
+// ── Per-method counters ───────────────────────────────────────────────────────
+//
+// Each emitMethod call resets this map so variables and labels within a single
+// generated method start from index 0. Counts are tracked per hint so that
+// `_pos0`, `_pos1` only count position-save variables, `_ch0`, `_ch1` only
+// count character captures, and so on.
 
-let counter = 0
-function nextId(): number {
-  return counter++
+let methodCounters = new Map<string, number>()
+
+function nextCountFor(key: string): number {
+  const n = methodCounters.get(key) ?? 0
+  methodCounters.set(key, n + 1)
+  return n
 }
+
 function namedVar(hint: string): string {
-  return `_${hint}${nextId()}`
+  return `_${hint}${nextCountFor(hint)}`
 }
 
 /** Derive a descriptive variable-name hint from a body node. */
@@ -234,6 +240,7 @@ function varHint(body: RuleBody): string {
 // ── Method emitter ────────────────────────────────────────────────────────────
 
 function emitMethod(name: string, body: RuleBody, observable: boolean): string[] {
+  methodCounters = new Map()
   const methodName = camelCase(name)
   const nodeName = `${pascalCase(name)}Node`
   const lines: string[] = []
@@ -251,6 +258,7 @@ function emitMethod(name: string, body: RuleBody, observable: boolean): string[]
   // Flatten top-level sequences so each item is a separate captured field.
   // Non-sequence bodies become a single item.
   const bodyItems = body.kind === 'sequence' ? body.items : [body]
+  const fieldNames = inferFieldNames(bodyItems)
   const itemVars: string[] = []
 
   for (const item of bodyItems) {
@@ -263,7 +271,7 @@ function emitMethod(name: string, body: RuleBody, observable: boolean): string[]
     lines.push(`  this.notifyExit('${name}', true)`)
   }
 
-  const fields = itemVars.map((v, i) => `item${i}: ${v}`).join(', ')
+  const fields = itemVars.map((v, i) => `${fieldNames[i]}: ${v}`).join(', ')
   lines.push(`  return { kind: '${name}', ${fields} }`)
   lines.push(`}`)
   return lines
@@ -355,12 +363,12 @@ function emitCapture(
         lines.push(`if (${v} === null) ${failStmt}`)
       } else {
         // Multiple specific codepoints: try each with readChar (no advance on failure)
-        const foundL = `found_ch${nextId()}`
+        const foundL = `found_ch${nextCountFor('found_ch')}`
         lines.push(`// eslint-disable-next-line @typescript-eslint/no-non-null-assertion`)
         lines.push(`let ${v}!: string`)
         lines.push(`${foundL}: {`)
         for (const cp of body.codepoints) {
-          const altL = `alt_ch${nextId()}`
+          const altL = `alt_ch${nextCountFor('alt_ch')}`
           lines.push(`  ${altL}: {`)
           lines.push(`    const ch = this.readChar(0x${cp.toString(16).padStart(2, '0')})`)
           lines.push(`    if (ch === null) break ${altL}`)
@@ -387,7 +395,8 @@ function emitCapture(
         itemVars.push(varName)
       }
       const v = namedVar('seq')
-      const fields = itemVars.map((name, i) => `item${i}: ${name}`).join(', ')
+      const fieldNames = inferFieldNames(body.items)
+      const fields = itemVars.map((name, i) => `${fieldNames[i]}: ${name}`).join(', ')
       allLines.push(`const ${v} = { ${fields} }`)
       return { lines: allLines, varName: v }
     }
@@ -396,14 +405,14 @@ function emitCapture(
       const type = typeForBody(body)
       const hint = varHint(body)
       const v = namedVar('alt')
-      const foundLabel = `found_${hint}${nextId()}`
+      const foundLabel = `found_${hint}${nextCountFor('found_' + hint)}`
       const lines: string[] = [
         `// eslint-disable-next-line @typescript-eslint/no-non-null-assertion`,
         `let ${v}!: ${type}`,
         `${foundLabel}: {`,
       ]
       for (const item of body.items) {
-        const altLabel = `alt_${varHint(item)}${nextId()}`
+        const altLabel = `alt_${varHint(item)}${nextCountFor('alt_' + varHint(item))}`
         const savedPos = namedVar('pos')
         const innerFail = `{ if (this.getPosition() !== ${savedPos}) throw new Error('LL(1) violation: alternative consumed input up to position ' + this.getPosition() + ' before failing (started at ' + ${savedPos} + ') — two alternatives share a common prefix'); this.restorePosition(${savedPos}); break ${altLabel} }`
         const inner = emitCapture(item, observable, innerFail)
@@ -422,7 +431,7 @@ function emitCapture(
     case 'optional': {
       const type = typeForBody(body.item)
       const v = namedVar(varHint(body.item))
-      const optLabel = `opt_${varHint(body.item)}${nextId()}`
+      const optLabel = `opt_${varHint(body.item)}${nextCountFor('opt_' + varHint(body.item))}`
       const savedPos = namedVar('pos')
       const innerFail = `{ this.restorePosition(${savedPos}); break ${optLabel} }`
       const inner = emitCapture(body.item, observable, innerFail)
@@ -439,7 +448,7 @@ function emitCapture(
 
     case 'zeroOrMore': {
       const arr = namedVar(varHint(body.item) + 's')
-      const loopLabel = `loop_${varHint(body.item)}${nextId()}`
+      const loopLabel = `loop_${varHint(body.item)}${nextCountFor('loop_' + varHint(body.item))}`
       const savedPos = namedVar('pos')
       const innerFail = `{ this.restorePosition(${savedPos}); break ${loopLabel} }`
       const inner = emitCapture(body.item, observable, innerFail)
@@ -459,7 +468,7 @@ function emitCapture(
       // First occurrence is mandatory (uses outer failStmt)
       const first = emitCapture(body.item, observable, failStmt)
       // Subsequent occurrences via loop
-      const loopLabel = `loop_${varHint(body.item)}${nextId()}`
+      const loopLabel = `loop_${varHint(body.item)}${nextCountFor('loop_' + varHint(body.item))}`
       const savedPos = namedVar('pos')
       const innerFail = `{ this.restorePosition(${savedPos}); break ${loopLabel} }`
       const rest = emitCapture(body.item, observable, innerFail)
@@ -478,7 +487,7 @@ function emitCapture(
     case 'exception': {
       // A - B: try B at current position; if B matches, fail. Else try A.
       const savedPos = namedVar('pos')
-      const excLabel = `exc_${varHint(body.except)}${nextId()}`
+      const excLabel = `exc_${varHint(body.except)}${nextCountFor('exc_' + varHint(body.except))}`
       const excMatched = namedVar('excMatched')
       const lines: string[] = []
       lines.push(`const ${savedPos} = this.getPosition()`)
@@ -497,7 +506,7 @@ function emitCapture(
 
     case 'repetition': {
       const arr = namedVar(varHint(body.item) + 's')
-      const repLabel = `rep_${varHint(body.item)}${nextId()}`
+      const repLabel = `rep_${varHint(body.item)}${nextCountFor('rep_' + varHint(body.item))}`
       const savedPos = namedVar('pos')
       const innerFail = `{ this.restorePosition(${savedPos}); break ${repLabel} }`
       const inner = emitCapture(body.item, observable, innerFail)

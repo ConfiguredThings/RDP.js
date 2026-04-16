@@ -7,6 +7,39 @@
 
 import type { GrammarAST, ProductionRule, RuleBody } from './ast.js'
 
+/**
+ * Infer field names for a list of grammar body items.
+ *
+ * Non-terminal references take the camelCase of the referenced rule name.
+ * All other items (terminals, core rules, composites) fall back to `item`n.
+ * When the same non-terminal name appears more than once, all occurrences are
+ * suffixed with a zero-based index (`year0`, `year1`, …).
+ */
+export function inferFieldNames(items: RuleBody[]): string[] {
+  // First pass: candidate name (null = use item-n fallback)
+  const candidates = items.map((item): string | null =>
+    item.kind === 'nonTerminal' ? camelCase(item.name) : null,
+  )
+
+  // Count occurrences of each non-null candidate
+  const counts = new Map<string, number>()
+  for (const c of candidates) {
+    if (c !== null) counts.set(c, (counts.get(c) ?? 0) + 1)
+  }
+
+  // Second pass: resolve duplicates with a numeric suffix
+  const seen = new Map<string, number>()
+  return candidates.map((candidate, i) => {
+    if (candidate === null) return `item${i}`
+    if ((counts.get(candidate) ?? 0) > 1) {
+      const occ = seen.get(candidate) ?? 0
+      seen.set(candidate, occ + 1)
+      return `${candidate}${occ}`
+    }
+    return candidate
+  })
+}
+
 /** Options for the type generator. */
 export type TypeGenOptions = {
   /** Root type name for the generated union. Defaults to `'ParseTree'`. */
@@ -65,8 +98,10 @@ export function typeForBody(body: RuleBody): string {
       return 'string'
     case 'nonTerminal':
       return `${pascalCase(body.name)}Node`
-    case 'sequence':
-      return `{ ${body.items.map((item, i) => `item${i}: ${typeForBody(item)}`).join('; ')} }`
+    case 'sequence': {
+      const names = inferFieldNames(body.items)
+      return `{ ${body.items.map((item, i) => `${names[i]}: ${typeForBody(item)}`).join('; ')} }`
+    }
     case 'alternation': {
       const types = [...new Set(body.items.map(typeForBody))]
       return types.join(' | ')
@@ -97,8 +132,14 @@ function emitRuleType(rule: ProductionRule): string[] {
   // Flatten top-level sequences so each item becomes a named field;
   // non-sequence bodies become a single item0 field.
   const bodyItems = rule.body.kind === 'sequence' ? rule.body.items : [rule.body]
-  const fields = bodyItems.map((item, i) => `  item${i}: ${typeForBody(item)}`)
+  const fieldNames = inferFieldNames(bodyItems)
+  const fields = bodyItems.map((item, i) => `  ${fieldNames[i]}: ${typeForBody(item)}`)
   return [`export type ${typeName} = {`, `  kind: '${rule.name}'`, ...fields, `}`]
+}
+
+function camelCase(name: string): string {
+  const s = name.replace(/[-_]([a-zA-Z])/g, (_, c: string) => c.toUpperCase())
+  return s.charAt(0).toLowerCase() + s.slice(1)
 }
 
 function pascalCase(name: string): string {
