@@ -19,7 +19,13 @@ import type { GrammarAST, RuleBody, CoreRuleName } from './ast.js'
 import { EBNFParser } from './ebnf-parser.js'
 import { ABNFParser } from './abnf-parser.js'
 import { detectLeftRecursion } from './left-recursion.js'
-import { generateTypes, typeForBody, arrayType, inferFieldNames } from './type-gen.js'
+import {
+  generateTypes,
+  generateWalker,
+  typeForBody,
+  arrayType,
+  inferFieldNames,
+} from './type-gen.js'
 
 /** Options controlling what `generateParser` emits. */
 export type GeneratorOptions = {
@@ -58,6 +64,19 @@ export type GeneratorOptions = {
    * @default false
    */
   caseSensitiveStrings?: boolean
+
+  /**
+   * When `true`, emit a `childNodes(node: ParseTree): ParseTree[]` helper alongside
+   * the parser and types. Use this when building tree walkers, linters, formatters,
+   * or any tool that needs to traverse the full parse tree structure.
+   *
+   * Pair with the `Visitor<T>` type and `visit()` function from
+   * `@configuredthings/rdp.js` to dispatch per-node logic without writing
+   * explicit `switch` statements.
+   *
+   * @default false
+   */
+  walker?: boolean
 }
 
 /**
@@ -188,6 +207,11 @@ export function generateParser(source: string, options: GeneratorOptions = {}): 
 
   // Append parse tree types
   lines.push(generateTypes(ast, { treeName }))
+
+  // Optionally append the childNodes walker helper
+  if (options.walker) {
+    lines.push(generateWalker(ast, { treeName }))
+  }
 
   return lines.join('\n')
 }

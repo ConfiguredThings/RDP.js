@@ -9,9 +9,12 @@
 import { parseArgs } from 'node:util'
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
 import { createRequire } from 'node:module'
-import { generateParser } from '../generator/index.js'
+import { generateParser, generateScaffold, generateInitScaffold } from '../generator/index.js'
+import type { ScaffoldPattern } from '../generator/index.js'
 import { EBNFParser } from '../generator/ebnf-parser.js'
 import { ABNFParser } from '../generator/abnf-parser.js'
+
+const SCAFFOLD_PATTERNS: ScaffoldPattern[] = ['evaluator', 'facade', 'pipeline', 'walker']
 
 const require = createRequire(import.meta.url)
 const { version } = require('../../../package.json') as { version: string }
@@ -45,6 +48,8 @@ function runGenerate(rawArgs: string[]): void {
       'parser-name': { type: 'string' },
       'tree-name': { type: 'string' },
       observable: { type: 'boolean' },
+      walker: { type: 'boolean' },
+      scaffold: { type: 'string' },
       'ast-only': { type: 'boolean' },
       'abnf-case-sensitive-strings': { type: 'boolean' },
     },
@@ -69,20 +74,32 @@ function runGenerate(rawArgs: string[]): void {
     | 'abnf'
   const source = readFileSync(grammarPath, 'utf-8')
 
+  const generatorOptions = {
+    format,
+    parserName: values['parser-name'] ?? 'GeneratedParser',
+    treeName: values['tree-name'] ?? 'ParseTree',
+    ...(values['observable'] !== undefined && { observable: values['observable'] }),
+    ...(values['walker'] !== undefined && { walker: values['walker'] }),
+    ...(values['abnf-case-sensitive-strings'] !== undefined && {
+      caseSensitiveStrings: values['abnf-case-sensitive-strings'],
+    }),
+  }
+
   let output: string
   if (values['ast-only']) {
     const ast = format === 'abnf' ? ABNFParser.parse(source) : EBNFParser.parse(source)
     output = JSON.stringify(ast, null, 2)
+  } else if (values['scaffold']) {
+    const pattern = values['scaffold']
+    if (!SCAFFOLD_PATTERNS.includes(pattern as ScaffoldPattern)) {
+      console.error(
+        `rdp-gen: unknown scaffold pattern "${pattern}". Valid patterns: ${SCAFFOLD_PATTERNS.join(', ')}`,
+      )
+      process.exit(1)
+    }
+    output = generateScaffold(source, pattern as ScaffoldPattern, generatorOptions)
   } else {
-    output = generateParser(source, {
-      format,
-      parserName: values['parser-name'] ?? 'GeneratedParser',
-      treeName: values['tree-name'] ?? 'ParseTree',
-      ...(values['observable'] !== undefined && { observable: values['observable'] }),
-      ...(values['abnf-case-sensitive-strings'] !== undefined && {
-        caseSensitiveStrings: values['abnf-case-sensitive-strings'],
-      }),
-    })
+    output = generateParser(source, generatorOptions)
   }
 
   if (values['output']) {
@@ -153,58 +170,10 @@ function runInit(rawArgs: string[]): void {
     exclude: ['node_modules', 'dist'],
   }
 
-  const parserTemplate = values['observable']
-    ? `\
-import { ObservableRDParser, ParseObserver } from '@configuredthings/rdp.js/observable'
-
-export class ${className} extends ObservableRDParser {
-  private constructor(source: DataView) {
-    super(source)
-  }
-
-  static parse(input: string, observer?: ParseObserver): unknown {
-    const bytes = new TextEncoder().encode(input)
-    const parser = new ${className}(new DataView(bytes.buffer))
-    if (observer !== undefined) parser.withObserver(observer)
-    return parser.#parseRoot()
-  }
-
-  #parseRoot(): unknown {
-    this.notifyEnter('root')
-    // TODO: implement your top-level production rule.
-    // Add private methods for each grammar rule, e.g. #parseExpression(), #parseTerm().
-    // Use this.peek(), this.matchChar(), this.expectChar(), this.readChar(), this.atEnd(), etc.
-    // Call this.error() to signal a parse failure at the current position.
-    // Call this.notifyEnter(name) at the top and this.notifyExit(name, matched) before each return.
-    if (!this.atEnd()) this.error('unexpected input')
-    this.notifyExit('root', false)
-    throw new Error('not implemented')
-  }
-}
-`
-    : `\
-import { RDParser } from '@configuredthings/rdp.js'
-
-export class ${className} extends RDParser {
-  private constructor(source: DataView) {
-    super(source)
-  }
-
-  static parse(input: string): unknown {
-    const bytes = new TextEncoder().encode(input)
-    return new ${className}(new DataView(bytes.buffer)).#parseRoot()
-  }
-
-  #parseRoot(): unknown {
-    // TODO: implement your top-level production rule.
-    // Add private methods for each grammar rule, e.g. #parseExpression(), #parseTerm().
-    // Use this.peek(), this.matchChar(), this.expectChar(), this.readChar(), this.atEnd(), etc.
-    // Call this.error() to signal a parse failure at the current position.
-    if (!this.atEnd()) this.error('unexpected input')
-    throw new Error('not implemented')
-  }
-}
-`
+  const parserTemplate = generateInitScaffold({
+    className,
+    ...(values['observable'] !== undefined && { observable: values['observable'] }),
+  })
 
   mkdirSync('src', { recursive: true })
   writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n', 'utf-8')
@@ -230,6 +199,12 @@ Options:
   --parser-name <name>               class name for the generated parser (default: GeneratedParser)
   --tree-name <name>                 type name for the generated parse tree (default: ParseTree)
   --observable                       extend ObservableRDParser; adds notifyEnter/notifyExit calls
+  --walker                           include childNodes() in the generated parser file
+  --scaffold <pattern>               emit a one-time usage scaffold instead of the parser
+                                     evaluator  one typed function per rule, ready to fill in
+                                     facade     error class, entry point, transform stub
+                                     pipeline   parse / validate / transform stage stubs
+                                     walker     walk() utility using childNodes (requires --walker)
   --ast-only                         emit grammar AST as JSON instead of TypeScript
   --abnf-case-sensitive-strings      match ABNF string literals case-sensitively
   -v, --version                      print version number

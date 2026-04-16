@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - `rdp-gen init` now emits a starter `src/<ClassName>.ts` alongside `package.json` and `tsconfig.json`, scaffolding the private-constructor / static-`parse` boilerplate so a new project compiles immediately ([#13](https://github.com/ConfiguredThings/RDP.js/issues/13))
 - `rdp-gen init --observable` variant extends `ObservableRDParser` instead of `RDParser`; the starter includes `notifyEnter`/`notifyExit` call sites and accepts an optional `ParseObserver` parameter in `static parse()`
+- `rdp-gen generate --scaffold <pattern>` emits a one-time starter file for a chosen usage pattern (not regenerated; edit freely). Four patterns are available: `evaluator` (a typed function per grammar rule), `facade` (domain error class, public entry point, transform stub), `pipeline` (parse / validate / transform stage stubs), `walker` (a `walk()` utility built on `childNodes`) ([#17](https://github.com/ConfiguredThings/RDP.js/issues/17))
+- `rdp-gen generate --walker` appends a `childNodes(node: ParseTree): ParseTree[]` helper to the generated parser file, returning the direct `ParseTree` children of any node — useful for tree walkers, linters, and formatters ([#17](https://github.com/ConfiguredThings/RDP.js/issues/17))
+- `Visitor<Union, T>` type and `visit()` function exported from the main package — dispatch a parse-tree node to the matching handler in a visitor map without writing explicit `switch` statements; use `Required<Visitor<ParseTree, T>>` to enforce exhaustive handling ([#17](https://github.com/ConfiguredThings/RDP.js/issues/17))
 
 ### Removed
 - `commander` dependency removed from the CLI — replaced with Node's built-in `util.parseArgs`. Turns out "zero dependencies" is easier to maintain when there actually are zero dependencies.
