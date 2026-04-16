@@ -21,8 +21,21 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Install Graphviz
+        run: sudo apt-get install -y graphviz
+
       - name: Install PlantUML
-        run: sudo apt-get install -y plantuml
+        run: |
+          curl -fsSL -o /usr/local/bin/plantuml.jar \
+            https://github.com/plantuml/plantuml/releases/download/v1.2026.2/plantuml-1.2026.2.jar
+          printf '#!/bin/sh\nexec java -jar /usr/local/bin/plantuml.jar "$@"\n' \
+            | sudo tee /usr/local/bin/plantuml > /dev/null
+          sudo chmod +x /usr/local/bin/plantuml
 
       - uses: actions/setup-node@v6
         with:
@@ -38,12 +51,12 @@ jobs:
       - name: Build library
         run: npm run build
 
-      - name: Generate API docs
-        run: npm run docs
-
       - name: Install docs-site dependencies
         run: npm ci
         working-directory: docs-site
+
+      - name: Generate API docs
+        run: npm run docs
 
       - name: Build docs site
         run: npm run build
