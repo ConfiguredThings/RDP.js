@@ -21,6 +21,6 @@ jobs:
             exit 1
           fi
           echo "✓ Unreleased changelog has content"
+      - run: npm run build
       - run: npm run lint
       - run: npm test
-      - run: npm run build
