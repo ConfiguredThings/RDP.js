@@ -11,5 +11,7 @@
   "plugin": ["./docs-site/typedoc-plugin-header.mjs"],
   "navigationLinks": {
     "← Docs": "../"
-  }
+  },
+  "excludePrivate": false,
+  "excludeInternal": false
 }

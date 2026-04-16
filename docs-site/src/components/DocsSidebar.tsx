@@ -10,7 +10,7 @@ interface Props {
   mobileOpen?: boolean
 }
 
-const SECTION_ORDER = ['Getting Started', 'Guides', 'Reference', 'Advanced']
+const SECTION_ORDER = ['Getting Started', 'Guides', 'Reference', 'Advanced', 'Examples']
 
 export default function DocsSidebar({ currentSlug, mobileOpen = false }: Props) {
   const data = useStaticQuery<{ allMdx: { nodes: SidebarEntry[] } }>(graphql`
