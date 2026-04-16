@@ -167,14 +167,14 @@ Digit  = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9';
 ```ts
 export type ExprNode = {
   kind: 'Expr'
-  item0: TermNode
-  item1: { item0: string; item1: TermNode }[]
+  term: TermNode
+  item1: { item0: string; term: TermNode }[]
 }
 
 export type TermNode = {
   kind: 'Term'
-  item0: FactorNode
-  item1: { item0: string; item1: FactorNode }[]
+  factor: FactorNode
+  item1: { item0: string; factor: FactorNode }[]
 }
 
 // … one type per rule …

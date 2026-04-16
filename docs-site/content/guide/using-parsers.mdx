@@ -21,28 +21,29 @@ a facade is usually the right move.
 ### Parse tree shape
 
 Every node is a discriminated object with a `kind` field matching the rule name and
-one `item`_n_ field per item in that rule's body:
+one field per item in that rule's body:
 
 ```ts
 // Grammar rule:  Date = Year, '-', Month, '-', Day;
 export type DateNode = {
   kind:  'Date'
-  item0: YearNode   // Year
-  item1: string     // '-'
-  item2: MonthNode  // Month
-  item3: string     // '-'
-  item4: DayNode    // Day
+  year:  YearNode   // Year  (non-terminal → named)
+  item1: string     // '-'   (terminal → item-n)
+  month: MonthNode  // Month (non-terminal → named)
+  item3: string     // '-'   (terminal → item-n)
+  day:   DayNode    // Day   (non-terminal → named)
 }
 ```
 
 | Grammar construct | Generated TypeScript type |
 |-------------------|---------------------------|
-| Terminal / char literal | `string` |
-| Non-terminal reference | `XxxNode` |
+| Terminal / char literal | `string` (field named `item`_n_) |
+| Non-terminal reference | `XxxNode` (field named after the rule, camelCase) |
+| Duplicate non-terminals | Suffixed: `year0`, `year1`, … |
 | Alternation `A \| B` | `A \| B` (string alternatives deduplicated) |
 | Optional `[A]` | `A \| null` |
 | Repetition `{A}` | `A[]` |
-| Sequence `A, B, C` | Flattened into `item0`, `item1`, `item2` fields |
+| Sequence `A, B, C` | Flattened: non-terminals named, terminals use `item`_n_ |
 
 ### The facade pattern
 
@@ -116,11 +117,11 @@ export function parseDate(input: string): CalendarDate {
     throw e
   }
 
-  const { item0: yr, item2: mo, item4: dy } = tree
+  const { year, month, day } = tree
   return {
-    year:  digits(yr.item0, yr.item1, yr.item2, yr.item3),
-    month: digits(mo.item0, mo.item1),
-    day:   digits(dy.item0, dy.item1),
+    year:  digits(year.digit0, year.digit1, year.digit2, year.digit3),
+    month: digits(month.digit0, month.digit1),
+    day:   digits(day.digit0, day.digit1),
   }
 }
 
@@ -206,16 +207,16 @@ export function evaluate(input: string): number {
 }
 
 function evalExpr(node: ExprNode): number {
-  let result = evalTerm(node.item0)
-  for (const { item0: op, item1: term } of node.item1) {
+  let result = evalTerm(node.term)
+  for (const { item0: op, term } of node.item1) {
     result = op === '+' ? result + evalTerm(term) : result - evalTerm(term)
   }
   return result
 }
 
 function evalTerm(node: TermNode): number {
-  let result = evalFactor(node.item0)
-  for (const { item0: op, item1: factor } of node.item1) {
+  let result = evalFactor(node.factor)
+  for (const { item0: op, factor } of node.item1) {
     result = op === '*' ? result * evalFactor(factor) : result / evalFactor(factor)
   }
   return result
@@ -224,11 +225,11 @@ function evalTerm(node: TermNode): number {
 function evalFactor(node: FactorNode): number {
   const inner = node.item0
   // FactorNode.item0 is NumberNode (has `kind`) or a grouped expression (does not)
-  return 'kind' in inner ? evalNumber(inner) : evalExpr(inner.item1)
+  return 'kind' in inner ? evalNumber(inner) : evalExpr(inner.expr)
 }
 
 function evalNumber(node: NumberNode): number {
-  return parseInt([node.item0, ...node.item1].map((d) => d.item0).join(''), 10)
+  return parseInt([node.digit, ...node.item1].map((d) => d.item0).join(''), 10)
 }
 ```
 
