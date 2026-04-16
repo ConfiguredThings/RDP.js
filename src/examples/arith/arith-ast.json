@@ -1,0 +1,208 @@
+{
+  "rules": [
+    {
+      "name": "Expr",
+      "body": {
+        "kind": "sequence",
+        "items": [
+          {
+            "kind": "nonTerminal",
+            "name": "wsp"
+          },
+          {
+            "kind": "nonTerminal",
+            "name": "Term"
+          },
+          {
+            "kind": "zeroOrMore",
+            "item": {
+              "kind": "sequence",
+              "items": [
+                {
+                  "kind": "nonTerminal",
+                  "name": "wsp"
+                },
+                {
+                  "kind": "alternation",
+                  "items": [
+                    {
+                      "kind": "terminal",
+                      "value": "+"
+                    },
+                    {
+                      "kind": "terminal",
+                      "value": "-"
+                    }
+                  ]
+                },
+                {
+                  "kind": "nonTerminal",
+                  "name": "wsp"
+                },
+                {
+                  "kind": "nonTerminal",
+                  "name": "Term"
+                }
+              ]
+            }
+          },
+          {
+            "kind": "nonTerminal",
+            "name": "wsp"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Term",
+      "body": {
+        "kind": "sequence",
+        "items": [
+          {
+            "kind": "nonTerminal",
+            "name": "Factor"
+          },
+          {
+            "kind": "zeroOrMore",
+            "item": {
+              "kind": "sequence",
+              "items": [
+                {
+                  "kind": "nonTerminal",
+                  "name": "wsp"
+                },
+                {
+                  "kind": "alternation",
+                  "items": [
+                    {
+                      "kind": "terminal",
+                      "value": "*"
+                    },
+                    {
+                      "kind": "terminal",
+                      "value": "/"
+                    }
+                  ]
+                },
+                {
+                  "kind": "nonTerminal",
+                  "name": "wsp"
+                },
+                {
+                  "kind": "nonTerminal",
+                  "name": "Factor"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Factor",
+      "body": {
+        "kind": "alternation",
+        "items": [
+          {
+            "kind": "sequence",
+            "items": [
+              {
+                "kind": "terminal",
+                "value": "("
+              },
+              {
+                "kind": "nonTerminal",
+                "name": "Expr"
+              },
+              {
+                "kind": "terminal",
+                "value": ")"
+              }
+            ]
+          },
+          {
+            "kind": "nonTerminal",
+            "name": "Number"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Number",
+      "body": {
+        "kind": "sequence",
+        "items": [
+          {
+            "kind": "nonTerminal",
+            "name": "Digit"
+          },
+          {
+            "kind": "zeroOrMore",
+            "item": {
+              "kind": "nonTerminal",
+              "name": "Digit"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Digit",
+      "body": {
+        "kind": "alternation",
+        "items": [
+          {
+            "kind": "terminal",
+            "value": "0"
+          },
+          {
+            "kind": "terminal",
+            "value": "1"
+          },
+          {
+            "kind": "terminal",
+            "value": "2"
+          },
+          {
+            "kind": "terminal",
+            "value": "3"
+          },
+          {
+            "kind": "terminal",
+            "value": "4"
+          },
+          {
+            "kind": "terminal",
+            "value": "5"
+          },
+          {
+            "kind": "terminal",
+            "value": "6"
+          },
+          {
+            "kind": "terminal",
+            "value": "7"
+          },
+          {
+            "kind": "terminal",
+            "value": "8"
+          },
+          {
+            "kind": "terminal",
+            "value": "9"
+          }
+        ]
+      }
+    },
+    {
+      "name": "wsp",
+      "body": {
+        "kind": "zeroOrMore",
+        "item": {
+          "kind": "terminal",
+          "value": " "
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+(* A simple arithmetic expression grammar with operator precedence and whitespace.
+   Supports +, -, *, / with correct precedence via Expr -> Term -> Factor.
+   Parentheses for grouping; integers are one or more decimal digits. *)
+
+Expr   = wsp, Term, {wsp, ('+' | '-'), wsp, Term}, wsp;
+Term   = Factor, {wsp, ('*' | '/'), wsp, Factor};
+Factor = '(', Expr, ')' | Number;
+Number = Digit, {Digit};
+Digit  = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9';
+wsp    = {' '};

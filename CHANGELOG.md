@@ -8,11 +8,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+
+- `src/grammars/arith.ebnf` — canonical arithmetic expression grammar (with whitespace handling, operator precedence, and parenthesised sub-expressions) used throughout worked examples; exported as `arithEBNF` from `@configuredthings/rdp.js/grammars`
+- `src/examples/arith/` — complete worked example: generated `ArithParser` (with `childNodes` walker), all four scaffold files (`arith-evaluator`, `arith-facade`, `arith-pipeline`, `arith-walker`), grammar AST export, and TypeDoc entry point. Documented as the `ArithExample` API module
+- `npm run generate:examples` — regenerates all files in `src/examples/arith/` from `arith.ebnf` via the built CLI; follows the same pattern as `generate:meta`
+- `src/__testUtils__/generator-runtime.ts` — shared test helpers (`transpile`, `compileAndImport`, `importScaffold`, `nav`) extracted from duplicate definitions across generator test files
+- Evaluator scaffold now emits `// node.field: Type` inline comments in each stub function body, showing the exact node shape without requiring users to cross-reference the generated types file
+- New guide page "Worked Example: Arithmetic Parser" covering the full lifecycle from grammar to generated parser to all four scaffold patterns; linked from README, CLI reference, and Using the Parse Tree
 - `rdp-gen init` now emits a starter `src/<ClassName>.ts` alongside `package.json` and `tsconfig.json`, scaffolding the private-constructor / static-`parse` boilerplate so a new project compiles immediately ([#13](https://github.com/ConfiguredThings/RDP.js/issues/13))
 - `rdp-gen init --observable` variant extends `ObservableRDParser` instead of `RDParser`; the starter includes `notifyEnter`/`notifyExit` call sites and accepts an optional `ParseObserver` parameter in `static parse()`
 - `rdp-gen generate --scaffold <pattern>` emits a one-time starter file for a chosen usage pattern (not regenerated; edit freely). Four patterns are available: `evaluator` (a typed function per grammar rule), `facade` (domain error class, public entry point, transform stub), `pipeline` (parse / validate / transform stage stubs), `walker` (a `walk()` utility built on `childNodes`) ([#17](https://github.com/ConfiguredThings/RDP.js/issues/17))
 - `rdp-gen generate --walker` appends a `childNodes(node: ParseTree): ParseTree[]` helper to the generated parser file, returning the direct `ParseTree` children of any node — useful for tree walkers, linters, and formatters ([#17](https://github.com/ConfiguredThings/RDP.js/issues/17))
 - `Visitor<Union, T>` type and `visit()` function exported from the main package — dispatch a parse-tree node to the matching handler in a visitor map without writing explicit `switch` statements; use `Required<Visitor<ParseTree, T>>` to enforce exhaustive handling ([#17](https://github.com/ConfiguredThings/RDP.js/issues/17))
+
+### Changed
+- `npm run diagrams` replaced by `docs-site/scripts/render-diagrams.sh` — auto-discovers all `.puml` files rather than requiring each to be listed explicitly
+- Architecture diagram restructured so `grammar.ebnf → Toolchain (build-time) → Your parsers` reads left-to-right; `skinparam linetype ortho` eliminates curved arc arrows throughout
+- `cli.mdx` EBNF grammar examples and `RailroadDiagram` component now import `arithEBNF` from `@configuredthings/rdp.js/grammars` rather than inlining the grammar text
+- Internal cross-links added throughout the guide (LL(1) → Concepts, `--observable` → Debugging, TypeDoc API links for key types and functions)
+- CI: `pr-checks.yml` and `docs.yml` now verify that committed files in `src/examples/` match `npm run generate:examples` output, failing with a diff if they drift
 
 ### Removed
 - `commander` dependency removed from the CLI — replaced with Node's built-in `util.parseArgs`. Turns out "zero dependencies" is easier to maintain when there actually are zero dependencies.

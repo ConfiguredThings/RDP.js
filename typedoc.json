@@ -1,5 +1,5 @@
 {
-  "entryPoints": ["src/rdparser.ts", "src/observable/index.ts", "src/generator/index.ts", "src/interpreter/index.ts"],
+  "entryPoints": ["src/rdparser.ts", "src/observable/index.ts", "src/generator/index.ts", "src/interpreter/index.ts", "src/examples/arith/index.ts"],
   "entryPointStrategy": "resolve",
   "sortEntryPoints": false,
   "out": "docs-site/static/api",

@@ -5,11 +5,12 @@
  * and is NOT regenerated. It is a starting point, not a derived artefact.
  */
 
-import type { GrammarAST } from './ast.js'
+import type { GrammarAST, ProductionRule } from './ast.js'
 import { EBNFParser } from './ebnf-parser.js'
 import { ABNFParser } from './abnf-parser.js'
 import { detectLeftRecursion } from './left-recursion.js'
 import type { GeneratorOptions } from './codegen.js'
+import { inferFieldNames, typeForBody } from './type-gen.js'
 
 /** The usage pattern to scaffold. */
 export type ScaffoldPattern = 'evaluator' | 'facade' | 'pipeline' | 'walker'
@@ -95,6 +96,7 @@ function generateEvaluatorScaffold(ast: GrammarAST, parserName: string): string 
     const nodeType = `${pascalCase(rule.name)}Node`
     lines.push(``)
     lines.push(`function eval${pascalCase(rule.name)}(node: ${nodeType}): unknown {`)
+    for (const hint of fieldHints(rule)) lines.push(`  // ${hint}`)
     lines.push(`  throw new Error('not implemented')`)
     lines.push(`}`)
   }
@@ -338,3 +340,15 @@ function stripParserSuffix(parserName: string): string {
 function pascalCase(name: string): string {
   return name.replace(/(^|[-_])([a-zA-Z])/g, (_, __, c: string) => c.toUpperCase())
 }
+/**
+ * Generate `node.field: Type` hint strings for a production rule's fields,
+ * mirroring the shape of the emitted `XxxNode` type. Used as inline comments
+ * in evaluator stub functions so users can see the available fields without
+ * cross-referencing the generated types file.
+ */
+function fieldHints(rule: ProductionRule): string[] {
+  const bodyItems = rule.body.kind === 'sequence' ? rule.body.items : [rule.body]
+  const names = inferFieldNames(bodyItems)
+  return bodyItems.map((item, i) => `node.${names[i]}: ${typeForBody(item)}`)
+}
+
