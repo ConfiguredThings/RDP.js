@@ -9,14 +9,14 @@ section: 'Getting Started'
 
 A minimal, typed base class for building recursive descent parsers in TypeScript — plus a code generator that does most of the work for you. TypeScript, dual ESM/CJS, zero dependencies.
 
-A recursive descent parser is a top-down parser where each production rule in the grammar maps directly to a method in code. The code structure mirrors the grammar structure exactly, which makes these parsers easy to read, test, and debug.
+A [recursive descent parser](/docs/concepts/) is a top-down parser where each production rule in the grammar maps directly to a method in code. The code structure mirrors the grammar structure exactly, which makes these parsers easy to read, test, and debug.
 
 ## Key components
 
-- **`RDParser`** — base class; subclass and implement each production rule as a method.
-- **`rdp-gen`** — CLI tool; reads a grammar file (ISO 14977 EBNF or RFC 5234 ABNF) and emits a strictly-typed TypeScript parser class together with exported discriminated-union parse-tree types.
-- **`GrammarInterpreter`** — runtime interpreter; execute grammars without a code-generation step (used by the playground and other tooling).
-- **`ObservableRDParser`** — opt-in parse tracing via an attached `ParseObserver`.
+- **[`RDParser`](/api/classes/RDParser.RDParser.html)** — base class; subclass and implement each production rule as a method.
+- **[`rdp-gen`](/docs/cli/)** — CLI tool; reads a grammar file (ISO 14977 EBNF or RFC 5234 ABNF) and emits a strictly-typed TypeScript parser class together with exported discriminated-union parse-tree types.
+- **[`GrammarInterpreter`](/api/classes/GrammarInterpreter.GrammarInterpreter.html)** — runtime interpreter; execute grammars without a code-generation step (used by the playground and other tooling).
+- **[`ObservableRDParser`](/docs/debugging/)** — opt-in parse tracing via an attached `ParseObserver`.
 
 ## Architecture
 
@@ -28,4 +28,4 @@ The library has a clear split between what runs at **build time** and what ships
 
 **Toolchain layer** — `rdp-gen` is a build tool. Internally it uses `ABNFParser` and `EBNFParser` (both subclasses of `GrammarParser`, which itself extends `RDParser`) to parse your grammar file and produce an AST. `codegen.ts` then walks that AST and emits a TypeScript class that extends `RDParser`. `GrammarParser` and its subclasses are toolchain-internal — they are not part of the generated output and not exported from the public API.
 
-**Interpreter layer** — `GrammarInterpreter` executes a grammar at runtime without a code-generation step, which is how the playground and other tooling work. It also extends `RDParser`.
+**Interpreter layer** — [`GrammarInterpreter`](/docs/playground-internals/) executes a grammar at runtime without a code-generation step, which is how the playground and other tooling work. It also extends `RDParser`.

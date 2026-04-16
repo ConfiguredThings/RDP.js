@@ -38,7 +38,7 @@ wsp    = {' '};
 />
 
 Operator precedence is encoded in the production hierarchy: `Expr` → `Term` → `Factor` → `Number`.
-Each alternative is distinguished by its first character, so the grammar is LL(1).
+Each alternative is distinguished by its first character, so the grammar is [LL(1)](/docs/concepts/#ll1-grammars-and-backtracking).
 
 Valid inputs: `42`, `3 + 4`, `3 + 4 * 2`, `(3 + 4) * 2`, `10 / (2 + 3) - 1`
 
@@ -96,7 +96,7 @@ ArithmeticParser.parse('3 + 4', new DebugObserver())
 // ← expr   matched  pos:5
 ```
 
-See [Debugging](/docs/debugging/) for full observer documentation.
+See [Debugging](/docs/debugging/) for full [`ObservableRDParser`](/api/classes/ObservableRDParser.ObservableRDParser.html) documentation.
 
 ### See it live
 

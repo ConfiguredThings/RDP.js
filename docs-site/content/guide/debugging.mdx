@@ -25,7 +25,7 @@ Every production rule entry and exit fires a pair of events on the observer. The
 
 ### Generating an observable parser
 
-Pass `--observable` to `rdp-gen`:
+Pass [`--observable`](/docs/cli/#rdp-gen-grammar--generate-a-parser) to `rdp-gen`:
 
 ```bash
 rdp-gen grammar.ebnf --parser-name MyParser --observable --output MyParser.ts
@@ -128,7 +128,7 @@ console.log(obs.calls)
 
 ### Using `GrammarInterpreter` with an observer
 
-`GrammarInterpreter` extends `ObservableRDParser`, so you can attach any observer to it
+[`GrammarInterpreter`](/docs/playground-internals/) extends `ObservableRDParser`, so you can attach any observer to it
 for step-by-step grammar debugging without a code-generation step:
 
 ```ts

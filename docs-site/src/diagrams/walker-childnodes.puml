@@ -1,0 +1,61 @@
+@startuml walker-childnodes
+skinparam componentStyle rectangle
+skinparam defaultFontName monospace
+skinparam ArrowColor #2d4a70
+skinparam ArrowFontColor #2d4a70
+skinparam ArrowFontSize 10
+skinparam ObjectBorderColor #0056A3
+skinparam ObjectBorderThickness 1.5
+skinparam ObjectBackgroundColor #cce8ff
+skinparam PackageBorderColor #7aaacc
+skinparam PackageBorderThickness 1.5
+skinparam BackgroundColor transparent
+skinparam NoteBorderColor #7aaacc
+skinparam NoteBackgroundColor #eef3fa
+
+left to right direction
+
+package "ExprNode  (input)" #eef3fa {
+  object "ExprNode" as expr {
+    kind = "Expr"
+    term: TermNode
+    item1: { item0: string; term: TermNode }[]
+  }
+
+  object "anonymous seq" as seq1 {
+    item0 = "+"
+    term: TermNode
+  }
+
+  object "anonymous seq" as seq2 {
+    item0 = "*"
+    term: TermNode
+  }
+
+  expr --> seq1 : item1[0]
+  expr --> seq2 : item1[1]
+}
+
+package "childNodes(exprNode)  →  ParseTree[]" #dce8f5 {
+  object "TermNode" as t0 #7aaacc {
+    kind = "Term"
+  }
+  object "TermNode" as t1 #7aaacc {
+    kind = "Term"
+  }
+  object "TermNode" as t2 #7aaacc {
+    kind = "Term"
+  }
+}
+
+expr ..> t0 : node.term
+seq1 ..> t1 : _item.term
+seq2 ..> t2 : _item.term
+
+note bottom of seq1
+  anonymous sequence objects
+  are unwrapped — only the
+  ParseTree fields are kept
+end note
+
+@enduml

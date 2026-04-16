@@ -16,8 +16,30 @@ Digit  = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9';
 ## Using the parse tree
 
 A generated parser returns a **parse tree** — a typed object whose shape mirrors
-the grammar. This section covers how to consume that output and why wrapping it in
-a facade is usually the right move.
+the grammar. This section covers how to consume that output and the four patterns
+for doing so, so you can pick the right one before writing any code.
+
+### Choosing a pattern
+
+| Pattern | Best for | Pros | Cons |
+|---------|----------|------|------|
+| [**Facade**](#the-facade-pattern) | Exposing a parser as a clean domain API | Hides generated types; callers never see the grammar; generated file can be freely regenerated | One function per grammar — not ideal when you need multiple independent transformations |
+| [**Evaluator**](#the-evaluator-pattern) | Computing a single value from the input (e.g. arithmetic, template rendering) | No intermediate representation; direct recursion mirrors grammar structure | Cannot reuse the same parse for different computations; grammar changes ripple through all functions |
+| [**Pipeline**](#the-multi-stage-pipeline) | Input that needs multi-error validation before transformation | Explicit stage boundaries; each stage is independently testable; validation errors accumulate | More boilerplate for simple cases; overkill when validation is trivial |
+| [**Tree walker**](#tree-walking) | Language tools — linters, formatters, compilers, analysis passes | Works directly on the generated node types; multiple passes over the same tree; `childNodes` handles traversal mechanics | Exposes generated types to calling code; grammar changes may require walker updates |
+
+If you need multiple independent operations over the same input, prefer the tree walker — parse once, walk many times.
+If callers should be isolated from grammar details, use the facade.
+If the result is a single computed value with no reuse, use the evaluator.
+If validation must collect all errors before rejecting, use the pipeline.
+
+Once you have chosen a pattern, `rdp-gen --scaffold <pattern>` emits a typed
+starter file wired up to your grammar — imports, entry points, stubs, and error
+handling already in place. See [CLI Reference — `--scaffold`](/docs/cli/#--scaffold--generate-a-usage-scaffold),
+or the [arithmetic worked example](/docs/arith-example/) for all four scaffold
+patterns applied to a complete grammar.
+
+![Pattern overview: string input flows through GeneratedParser to a ParseTree; four component patterns consume it - Facade wraps and hides types, Evaluator computes a value directly, Pipeline validates then transforms, Walker traverses with childNodes and visit()](/pattern-overview.svg)
 
 ### Parse tree shape
 
@@ -48,9 +70,10 @@ export type DateNode = {
 
 ### The facade pattern
 
-Parse trees are shaped like grammars, not domains. Callers typically want a clean
-domain object — not a `YearNode` containing four `DigitNode`s each wrapping a
-`string`.
+Parse trees are shaped like grammars, not **domains**. A domain object is a type
+that makes sense in your application — `CalendarDate { year, month, day }` — as
+opposed to a grammar artefact — `DateNode → YearNode → DigitNode → string`.
+Callers typically want the former; the parse tree gives them the latter.
 
 ![Parse tree for the date example (4 levels deep) versus the flat CalendarDate domain object](/cst-vs-domain.svg)
 
@@ -248,6 +271,21 @@ The evaluator is a better fit than the facade here because the result (`number`)
 not a domain object — it is the computation itself. There is nothing to store; the
 tree is consumed and discarded in one traversal.
 
+The evaluator is also the pattern that most directly mirrors how the generated
+parser itself works. Both have one function per grammar rule, with each function
+calling the others in exactly the shape the grammar describes:
+
+```
+Parser:    #parse_expr() → #parse_term() → #parse_factor() → #parse_expr()
+Evaluator:  evalExpr()   →  evalTerm()   →  evalFactor()   →  evalExpr()
+```
+
+The call graphs are isomorphic. The only difference is what each function
+traverses — the parser consumes a **character stream** (building structure), the
+evaluator consumes the **tree the parser produced** (collapsing that structure back
+to a value). The grammar defines both processes simultaneously; the evaluator just
+makes the second one explicit.
+
 ---
 
 ### The multi-stage pipeline
@@ -334,10 +372,130 @@ known-valid ones — without needing to construct grammar input for every case.
 
 ---
 
-### When to skip the facade
+---
 
-If the tree **is** your domain — you are building a linter, formatter, or language
-tool that needs to traverse or rewrite the grammar structure — use the generated
-node types directly. The facade pattern is for boundary points where you want to
-present a parser's output as a first-class domain value to code that should not
-know or care that a parser was involved.
+### Tree walking
+
+When you are building a language tool — a linter, formatter, compiler, or analysis
+pass — the tree itself is the domain. You need to traverse every node, and you may
+want several independent passes over the same tree. The tree-walking pattern
+addresses this directly.
+
+There are two pieces. The `Visitor<T>` type and `visit()` function come from the
+`@configuredthings/rdp.js` runtime and work with any generated grammar. The
+`childNodes()` function is grammar-specific and is emitted when you pass [`--walker`](/docs/cli/#generated-parse-tree-types)
+to `rdp-gen`.
+
+```bash
+rdp-gen expr.ebnf --parser-name ExprParser --walker --output src/ExprParser.ts
+```
+
+#### `Visitor<T>` and `visit()`
+
+`Visitor<ParseTree, T>` is a mapped type that derives one optional handler per
+`kind` value from your `ParseTree` union. You only declare handlers for the node
+types you care about; unhandled nodes return `undefined`.
+
+![visit() dispatch: caller passes node (kind='Number') and visitor to visit(); visit looks up visitor['Number']; if a handler is registered it is called with the node and the result returned; if no handler is registered, undefined is returned](/walker-visit-dispatch.svg)
+
+```ts
+import { visit, type Visitor } from '@configuredthings/rdp.js'
+import type { ParseTree } from './ExprParser.js'
+
+// Handle exactly the node types you need — all others return undefined
+const linter: Visitor<ParseTree, string | undefined> = {
+  Number: (n) => n.digit.item0 === '0' ? 'leading zero' : undefined,
+}
+
+const warning = visit(node, linter)  // string | undefined
+```
+
+When you want TypeScript to enforce that every node kind is handled — so that a new
+grammar rule produces a compile error rather than silently returning `undefined` —
+use `Required<Visitor<ParseTree, T>>`:
+
+```ts
+// TypeScript error here if any case is missing
+const printer: Required<Visitor<ParseTree, string>> = {
+  Expr:   (n) => `expr`,
+  Term:   (n) => `term`,
+  Factor: (n) => `factor`,
+  Number: (n) => `number`,
+  Digit:  (n) => n.item0,
+}
+```
+
+#### `childNodes()`
+
+`childNodes(node)` returns the direct `ParseTree` children of any node — every
+named rule node reachable from its fields, with arrays and anonymous sequence
+objects unwrapped. Terminal strings are not included.
+
+![childNodes unwrapping: ExprNode has a term field and an item1 array of anonymous sequence objects; childNodes returns a flat ParseTree[] containing the TermNode from term and the TermNode from each sequence object, discarding the operator strings](/walker-childnodes.svg)
+
+```ts
+import { childNodes } from './ExprParser.js'
+import type { ParseTree } from './ExprParser.js'
+
+// ExprParser.ts was generated with --walker
+childNodes(exprNode)    // → [termNode, termNode, ...]
+childNodes(digitNode)   // → []  (leaf — no ParseTree children)
+```
+
+With `childNodes` in hand, a full recursive walk is just a few lines:
+
+```ts
+function walk(node: ParseTree, fn: (n: ParseTree) => void): void {
+  fn(node)
+  for (const child of childNodes(node)) walk(child, fn)
+}
+```
+
+#### Worked example — collect all number literals
+
+```ts
+import { ExprParser, childNodes } from './ExprParser.js'
+import { visit, type Visitor } from '@configuredthings/rdp.js'
+import type { ParseTree, NumberNode } from './ExprParser.js'
+
+export function collectNumbers(input: string): NumberNode[] {
+  const tree = ExprParser.parse(input)
+  const numbers: NumberNode[] = []
+
+  const collector: Visitor<ParseTree> = {
+    Number: (n) => { numbers.push(n) },
+  }
+
+  function walk(node: ParseTree): void {
+    visit(node, collector)
+    for (const child of childNodes(node)) walk(child)
+  }
+  walk(tree)
+
+  return numbers
+}
+
+collectNumbers('3 + 4 * 2')  // → [NumberNode('3'), NumberNode('4'), NumberNode('2')]
+```
+
+Because `walk` and `collector` are separate, you can compose multiple visitors
+over a single traversal or run independent passes on the same tree:
+
+```ts
+function walk(node: ParseTree): void {
+  visit(node, linter)       // first pass
+  visit(node, collector)    // second pass — same traversal
+  for (const child of childNodes(node)) walk(child)
+}
+```
+
+#### Max depth — a traversal without `visit()`
+
+For traversals that don't need per-kind dispatch, `childNodes` alone is enough:
+
+```ts
+function maxDepth(node: ParseTree): number {
+  const kids = childNodes(node)
+  return kids.length === 0 ? 1 : 1 + Math.max(...kids.map(maxDepth))
+}
+```

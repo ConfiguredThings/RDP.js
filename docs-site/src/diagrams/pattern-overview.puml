@@ -1,0 +1,39 @@
+@startuml pattern-overview
+skinparam componentStyle rectangle
+skinparam defaultFontName monospace
+skinparam ArrowColor #2d4a70
+skinparam ArrowFontColor #2d4a70
+skinparam ArrowFontSize 10
+skinparam ComponentBorderColor #0056A3
+skinparam ComponentBorderThickness 1.5
+skinparam ComponentBackgroundColor #cce8ff
+skinparam PackageBorderColor #7aaacc
+skinparam PackageBorderThickness 1.5
+skinparam BackgroundColor transparent
+skinparam InterfaceBackgroundColor #cce8ff
+skinparam InterfaceBorderColor #0056A3
+
+top to bottom direction
+
+() " string " as input
+component "GeneratedParser" as parser
+interface "ParseTree" as tree
+
+input -down-> parser : encode + parse
+parser -down-> tree : typed node tree
+
+component "Facade" as facade
+component "Evaluator" as evaluator
+component "Pipeline" as pipeline
+component "Walker" as walker
+
+facade -[hidden]r-> evaluator
+evaluator -[hidden]r-> pipeline
+pipeline -[hidden]r-> walker
+
+tree --> facade       : DomainType
+tree --> evaluator    : number / string
+tree --> pipeline     : Domain (validated)
+tree --> walker       : T[] / analysis
+
+@enduml
