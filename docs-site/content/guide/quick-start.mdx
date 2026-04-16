@@ -11,9 +11,16 @@ npm install -g @configuredthings/rdp.js
 mkdir my-parser && cd my-parser
 rdp-gen init --name my-parser
 npm install
+npm run build   # compiles src/MyParser.ts → dist/
 ```
 
-`rdp-gen init` writes a `package.json` and a `tsconfig.json` with all required compiler options pre-configured.
+`rdp-gen init` writes a `package.json`, a `tsconfig.json` with all required
+compiler options pre-configured, and a starter `src/MyParser.ts` containing the
+private-constructor / static-`parse` boilerplate — so the project compiles
+immediately and you can start filling in grammar rules.
+
+Add `--observable` to extend `ObservableRDParser` instead, with `notifyEnter`/`notifyExit`
+call sites pre-wired and an optional `ParseObserver` parameter in `static parse()`.
 
 ## Manual setup
 
