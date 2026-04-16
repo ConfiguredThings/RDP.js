@@ -75,6 +75,10 @@ jobs:
       - name: Test
         run: npm test
 
+      - name: Install docs-site dependencies
+        run: npm ci
+        working-directory: docs-site
+
       - name: Generate API docs
         run: npm run docs
 
@@ -107,10 +111,6 @@ jobs:
             --notes-file release-notes.txt
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Install docs-site dependencies
-        run: npm ci
-        working-directory: docs-site
 
       - name: Build docs site
         run: npm run build
