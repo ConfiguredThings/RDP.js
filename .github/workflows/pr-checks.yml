@@ -13,8 +13,18 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
+            
+      - name: Install library dependencies
+        run: npm ci
+
+      - name: Build library
+        run: npm run build
+      
+      - name: Test
+        run: npm test
+
       - name: Check Unreleased changelog has content
+        if: github.actor != 'dependabot[bot]'
         run: |
           if ! awk '/^## \[Unreleased\]/{found=1; next} found && /^## /{exit} found && NF{has_content=1} END{exit !has_content}' CHANGELOG.md; then
             echo "::error file=CHANGELOG.md::The [Unreleased] section in CHANGELOG.md is empty. Add an entry describing your changes before merging."
