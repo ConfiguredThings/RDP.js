@@ -348,6 +348,14 @@
 
 }
 
+/* ── Page title: allow break at "/" on narrow screens ────────────────────── */
+@media (max-width: 767px) {
+    .tsd-page-title h1 {
+        font-size: clamp(1.1rem, 5vw, 1.875rem);
+        overflow-wrap: anywhere;
+    }
+}
+
 @media (max-width: 767px) and (prefers-color-scheme: dark) {
     .site-nav-hamburger { color: #8fa8bf; }
 
