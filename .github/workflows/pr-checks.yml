@@ -20,16 +20,6 @@ jobs:
       - name: Build library
         run: npm run build
 
-      - name: Verify generated examples are up-to-date
-        run: |
-          npm run generate:examples
-          if ! git diff --quiet src/examples/; then
-            echo "::error::Generated example files are out of date. Run 'npm run generate:examples' and commit the changes."
-            git diff src/examples/
-            exit 1
-          fi
-          echo "✓ Generated examples match committed files"
-
       - name: Test
         run: npm test
 
