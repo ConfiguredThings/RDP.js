@@ -1,0 +1,61 @@
+@startuml playground-data-flow
+skinparam componentStyle rectangle
+skinparam defaultFontName monospace
+skinparam ArrowColor #2d4a70
+skinparam ArrowFontColor #2d4a70
+skinparam ArrowFontSize 10
+skinparam ComponentBorderColor #0056A3
+skinparam ComponentBorderThickness 1.5
+skinparam ComponentBackgroundColor #cce8ff
+skinparam PackageBorderColor #7aaacc
+skinparam PackageBorderThickness 1.5
+skinparam BackgroundColor transparent
+skinparam NoteBackgroundColor #eef3fa
+skinparam NoteBorderColor #7aaacc
+
+skinparam component<<key>> {
+  BackgroundColor #0056A3
+  FontColor white
+  BorderColor #003d7a
+}
+
+top to bottom direction
+
+() " grammar source " as grammarSrc
+() " test input " as testInput
+
+component "① EBNFParser / ABNFParser" as grammarParser
+() " GrammarAST " as ast
+component "② GrammarInterpreter + TraceObserver" <<key>> as interp
+() " ParseEvent[] " as trace
+
+package "③ Debug UI" #eef3fa {
+  component "step debugger\n(frame index)" as stepper
+  component "call stack\n(replay to frame)" as callStack
+  component "position highlight\n(event.position)" as posHighlight
+  component "trace log\n(events[0..frame])" as traceLog
+}
+
+grammarSrc -down-> grammarParser
+grammarParser -down-> ast
+ast -down-> interp
+testInput -right-> interp
+interp -down-> trace
+trace -down-> stepper
+trace -down-> callStack
+trace -down-> posHighlight
+trace -down-> traceLog
+
+note right of interp
+  Runs synchronously in the
+  browser on every keypress.
+  No transpilation step needed.
+end note
+
+note right of trace
+  Computed once per keypress
+  and stored in React state.
+  All UI driven from this array.
+end note
+
+@enduml

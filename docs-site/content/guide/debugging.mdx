@@ -1,7 +1,8 @@
 ---
 title: 'Debugging'
 slug:  'debugging'
-order: 6
+order: 7
+section: 'Guides'
 ---
 
 ## Debugging with `ObservableRDParser`
@@ -15,6 +16,12 @@ on the instance before calling `parse()`.
 
 Production parsers extend the lean `RDParser` and carry **zero observer overhead** — only
 parsers that explicitly extend `ObservableRDParser` incur any tracing cost.
+
+Every production rule entry and exit fires a pair of events on the observer. The sequence below shows what fires when parsing the input `"42"` against the arithmetic grammar:
+
+![Sequence diagram showing enter and exit events fired to ParseObserver while parsing "42": enter expr, enter term, enter factor, enter number, then exit number matched, exit factor matched, exit term matched, exit expr matched](/observer-sequence.svg)
+
+`DebugObserver` formats these as an indented call tree printed to the console. `TraceObserver` stores them as a `ParseEvent[]` array for programmatic inspection.
 
 ### Generating an observable parser
 

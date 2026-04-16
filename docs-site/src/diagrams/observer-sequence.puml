@@ -1,0 +1,41 @@
+@startuml observer-sequence
+skinparam defaultFontName monospace
+skinparam ArrowColor #2d4a70
+skinparam ArrowFontColor #2d4a70
+skinparam ArrowFontSize 10
+skinparam ParticipantBorderColor #0056A3
+skinparam ParticipantBorderThickness 1.5
+skinparam ParticipantBackgroundColor #cce8ff
+skinparam SequenceLifeLineBorderColor #7aaacc
+skinparam BackgroundColor transparent
+skinparam NoteBackgroundColor #eef3fa
+skinparam NoteBorderColor #7aaacc
+
+participant "Parser" as P
+participant "ParseObserver" as O
+
+note over P : input = "42"
+
+P -> O : enter("expr",   pos=0)
+P -> O : enter("term",   pos=0)
+P -> O : enter("factor", pos=0)
+P -> O : enter("number", pos=0)
+
+note over P
+  consumes '4' (pos 0→1)
+  consumes '2' (pos 1→2)
+end note
+
+P -> O : exit("number", matched=true,  pos=2)
+P -> O : exit("factor", matched=true,  pos=2)
+P -> O : exit("term",   matched=true,  pos=2)
+P -> O : exit("expr",   matched=true,  pos=2)
+
+note over O
+  DebugObserver formats these as
+  an indented call tree.
+  TraceObserver stores them as
+  a ParseEvent[] array.
+end note
+
+@enduml

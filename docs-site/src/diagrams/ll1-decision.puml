@@ -1,0 +1,32 @@
+@startuml ll1-decision
+skinparam ActivityBorderColor #0056A3
+skinparam ActivityBorderThickness 1.5
+skinparam ActivityBackgroundColor #cce8ff
+skinparam ActivityArrowColor #2d4a70
+skinparam ActivityArrowFontColor #2d4a70
+skinparam ActivityArrowFontSize 10
+skinparam NoteBackgroundColor #eef3fa
+skinparam NoteBorderColor #7aaacc
+skinparam BackgroundColor transparent
+skinparam defaultFontName monospace
+
+start
+
+:peek one byte\n(lookahead — do not consume);
+
+if (first byte matches\nan alternative?) then (yes)
+  :parse that alternative\n(consume matched bytes);
+  :return result to caller;
+  stop
+else (no match)
+  :throw RDParserException\nat current position; <<#pink>>
+  note right
+    No backtracking —
+    each decision is final.
+    <b>restorePosition()</b> exists
+    for hand-crafted parsers only.
+  end note
+  stop
+endif
+
+@enduml

@@ -2,6 +2,7 @@
 title: 'Tutorial: Arithmetic Parser'
 slug:  'tutorial'
 order: 4
+section: 'Getting Started'
 ---
 
 ## Tutorial: arithmetic expression parser with `rdp-gen`
@@ -23,6 +24,18 @@ Number = Digit, {Digit};
 Digit  = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9';
 wsp    = {' '};
 ```
+
+<RailroadDiagram
+  rules={['Expr', 'Term', 'Factor']}
+  grammar={`
+Expr   = wsp, Term, {wsp, ('+' | '-'), wsp, Term}, wsp;
+Term   = Factor, {wsp, ('*' | '/'), wsp, Factor};
+Factor = '(', Expr, ')' | Number;
+Number = Digit, {Digit};
+Digit  = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9';
+wsp    = {' '};
+  `}
+/>
 
 Operator precedence is encoded in the production hierarchy: `Expr` → `Term` → `Factor` → `Number`.
 Each alternative is distinguished by its first character, so the grammar is LL(1).

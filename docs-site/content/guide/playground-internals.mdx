@@ -1,7 +1,7 @@
 ---
 title: 'Playground: Under the Hood'
 slug:  'playground-internals'
-order: 9
+order: 10
 section: 'Advanced'
 ---
 
@@ -21,6 +21,8 @@ Grammar source text
   → ParseEvent[]
   → Debug UI (step through, call stack, position highlight, trace log)
 ```
+
+![Playground data flow diagram showing grammar source feeding EBNFParser to produce a GrammarAST, which GrammarInterpreter consumes together with the test input to emit a ParseEvent array, which then drives four debug UI components: step debugger, call stack, position highlight, and trace log](/playground-data-flow.svg)
 
 Everything runs synchronously in the browser on each keystroke.
 

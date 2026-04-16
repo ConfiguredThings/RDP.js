@@ -1,7 +1,8 @@
 ---
 title: 'CLI Reference'
 slug:  'cli'
-order: 7
+order: 8
+section: 'Reference'
 ---
 
 ## CLI Reference — `rdp-gen`
@@ -232,6 +233,20 @@ wsp    = {' '};
 | `n * A` | Exactly n repetitions |
 | `A - B` | Exception: match A but not B |
 | `(A)` | Grouping |
+
+The railroad diagrams below show how these operators combine in the arithmetic grammar — a concrete example of sequencing (`,`), alternation (`|`), and repetition (`{…}`) in practice:
+
+<RailroadDiagram
+  rules={['Expr', 'Term', 'Factor']}
+  grammar={`
+Expr   = wsp, Term, {wsp, ('+' | '-'), wsp, Term}, wsp;
+Term   = Factor, {wsp, ('*' | '/'), wsp, Factor};
+Factor = '(', Expr, ')' | Number;
+Number = Digit, {Digit};
+Digit  = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9';
+wsp    = {' '};
+  `}
+/>
 
 ### Grammar format — ABNF
 

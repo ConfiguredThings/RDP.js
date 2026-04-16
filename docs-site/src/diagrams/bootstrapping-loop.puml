@@ -1,0 +1,43 @@
+@startuml bootstrapping-loop
+skinparam componentStyle rectangle
+skinparam defaultFontName monospace
+skinparam ArrowColor #2d4a70
+skinparam ArrowFontColor #2d4a70
+skinparam ArrowFontSize 10
+skinparam ComponentBorderColor #0056A3
+skinparam ComponentBorderThickness 1.5
+skinparam ComponentBackgroundColor #cce8ff
+skinparam PackageBorderColor #7aaacc
+skinparam PackageBorderThickness 1.5
+skinparam BackgroundColor transparent
+skinparam NoteBackgroundColor #eef3fa
+skinparam NoteBorderColor #7aaacc
+
+skinparam component<<key>> {
+  BackgroundColor #0056A3
+  FontColor white
+  BorderColor #003d7a
+}
+
+top to bottom direction
+
+file "ebnf-meta.abnf\n(EBNF grammar, written in ABNF)" as metagrammar
+component "rdp-gen" <<key>> as rdpgen
+component "EBNFMetaParser.ts\n(generated)" as generated
+
+metagrammar -down-> rdpgen : "Stage 1 — fed as input"
+rdpgen -down-> generated : "emits"
+
+note right of rdpgen
+  Stage 0: ships with a hand-written
+  EBNFParser that reads any EBNF grammar file.
+end note
+
+note right of generated
+  Stage 2: can parse EBNF grammar files —
+  including ebnf-meta.abnf itself.
+  Wiring it into rdp-gen would make
+  the tool self-hosted.
+end note
+
+@enduml

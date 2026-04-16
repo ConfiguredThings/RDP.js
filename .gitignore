@@ -14,7 +14,5 @@ docs-site/.cache/
 # Generated static assets (produced by CI scripts — originals live elsewhere in the repo)
 docs-site/typedoc-theme/site-header.html
 docs-site/static/api/
-docs-site/static/architecture.svg
-docs-site/static/configuredthings.svg
-docs-site/static/configuredthings-light.svg
-docs-site/static/recursquirrel.svg
+docs-site/static/*.svg
+!docs-site/static/configuredthings*.svg

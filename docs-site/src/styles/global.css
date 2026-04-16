@@ -167,6 +167,20 @@ a:hover { color: var(--color-link-hover); text-decoration: underline; }
   padding: 0 0.5rem;
 }
 
+.docs-sidebar-section {
+  margin-bottom: 1.2rem;
+}
+
+.docs-sidebar-section-heading {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--color-text-muted);
+  padding: 0 0.5rem;
+  margin-bottom: 0.2rem;
+}
+
 .docs-sidebar ul {
   list-style: none;
   padding: 0;

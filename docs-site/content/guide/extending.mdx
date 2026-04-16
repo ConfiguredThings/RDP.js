@@ -1,7 +1,8 @@
 ---
 title: 'Extending RDParser'
 slug:  'extending'
-order: 3
+order: 5
+section: 'Guides'
 ---
 
 ## Extending `RDParser` — hand-crafted parsers
@@ -60,6 +61,10 @@ Term   = Factor, {wsp, ('*' | '/'), wsp, Factor};
 Factor = '(', Expr, ')' | Number;
 Number = Digit, {Digit};
 ```
+
+The call graph below shows how the methods relate. The loop-back from `parseFactor` to `parseExpr` is what handles parenthesised subexpressions — parsing `(3 + 4)` recurses all the way back to the top of the grammar and returns a value, which `parseFactor` then hands up the chain.
+
+![Parser method call graph showing parse calling parseExpr, which calls parseTerm in a loop, which calls parseFactor in a loop, which either calls parseNumber or loops back to parseExpr for parenthesised expressions](/parser-call-graph.svg)
 
 ```ts
 import { RDParser } from '@configuredthings/rdp.js'

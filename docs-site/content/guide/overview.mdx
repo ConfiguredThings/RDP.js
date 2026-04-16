@@ -2,39 +2,20 @@
 title: 'Overview'
 slug:  'overview'
 order: 1
+section: 'Getting Started'
 ---
-
-## What is Recursive Descent Parsing?
-
-A recursive descent parser is a top-down parser where each production rule in the grammar maps directly to a method in code. The parser scans input left-to-right, building the leftmost derivation, and uses a small fixed amount of lookahead to decide which production to apply at each step.
-
-This produces parsers that are easy to read, test, and debug — the code structure mirrors the grammar structure exactly.
-
-## LL(1) grammars and backtracking
-
-**What LL(1) means:** the parser scans left-to-right (first L), produces the leftmost derivation (second L), and needs only one byte of lookahead (the 1) to decide which production to apply at each step.
-
-**Grammars that are LL(1):** configuration files, data serialisation formats, expression languages with explicit precedence, network protocol frames, and grammars written specifically to be parsed top-down.
-
-**`rdp-gen` targets LL(1) grammars.** It generates parsers that use a single byte of lookahead with no backtracking. Feeding it a non-LL(1) grammar produces a parser that silently returns incorrect results, not a helpful error. The one exception is **left recursion** — any rule that references itself as its first symbol — which `rdp-gen` detects at generation time and rejects.
-
-**Other grammars that are not LL(1):**
-- **Ambiguous grammars** — where a single input string has more than one parse tree.
-- **Grammars requiring more than one byte of lookahead** — where two alternatives share a long common prefix.
-- **Most general programming language grammars** — C, C++, Java, and similar languages are not LL(1) for several compounding reasons (semantic disambiguation, multi-token lookahead, dangling-else ambiguity). These are handled by LR, LALR, or GLR parsers.
-
-Left recursion can always be eliminated by rewriting the grammar to use iteration (`{...}` / `X, {X}`), which is what LL(1) grammars require.
-
-**The base class is more general.** `RDParser` exposes `restorePosition`, which lets hand-written subclasses implement backtracking and parse grammars beyond LL(1). `rdp-gen` does not emit backtracking code — that is a hand-crafting concern.
 
 ## What is `@configuredthings/rdp.js`?
 
-A minimal, typed base class that handles buffer management and position tracking so subclasses can focus purely on grammar rules. TypeScript, dual ESM/CJS, zero runtime dependencies.
+A minimal, typed base class for building recursive descent parsers in TypeScript — plus a code generator that does most of the work for you. TypeScript, dual ESM/CJS, zero dependencies.
 
-Key components:
+A recursive descent parser is a top-down parser where each production rule in the grammar maps directly to a method in code. The code structure mirrors the grammar structure exactly, which makes these parsers easy to read, test, and debug.
+
+## Key components
+
 - **`RDParser`** — base class; subclass and implement each production rule as a method.
 - **`rdp-gen`** — CLI tool; reads a grammar file (ISO 14977 EBNF or RFC 5234 ABNF) and emits a strictly-typed TypeScript parser class together with exported discriminated-union parse-tree types.
-- **`GrammarInterpreter`** — runtime interpreter; execute grammars without a code-generation step (for tooling and playgrounds).
+- **`GrammarInterpreter`** — runtime interpreter; execute grammars without a code-generation step (used by the playground and other tooling).
 - **`ObservableRDParser`** — opt-in parse tracing via an attached `ParseObserver`.
 
 ## Architecture

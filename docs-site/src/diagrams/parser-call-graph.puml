@@ -1,0 +1,49 @@
+@startuml parser-call-graph
+skinparam componentStyle rectangle
+skinparam defaultFontName monospace
+skinparam ArrowColor #2d4a70
+skinparam ArrowFontColor #2d4a70
+skinparam ArrowFontSize 10
+skinparam ComponentBorderColor #0056A3
+skinparam ComponentBorderThickness 1.5
+skinparam ComponentBackgroundColor #cce8ff
+skinparam PackageBorderColor #7aaacc
+skinparam PackageBorderThickness 1.5
+skinparam BackgroundColor transparent
+
+skinparam component<<key>> {
+  BackgroundColor #0056A3
+  FontColor white
+  BorderColor #003d7a
+}
+
+top to bottom direction
+
+() " string " as input
+() " number " as output
+
+package "ArithmeticParser — one method per grammar rule" #eef3fa {
+  component "parse()" <<key>> as parse
+  component "parseExpr()" as parseExpr
+  component "parseTerm()" as parseTerm
+  component "parseFactor()" as parseFactor
+  component "parseNumber()" as parseNumber
+
+  parse -down-> parseExpr
+  parseExpr -down-> parseTerm : "loop: {op, Term}"
+  parseTerm -down-> parseFactor : "loop: {op, Factor}"
+  parseFactor -down-> parseNumber : "② Number"
+  parseFactor -left-> parseExpr : "① '(' Expr ')'"
+}
+
+input -down-> parse
+parse -right-> output
+
+note right of parseFactor
+  Two alternatives:
+  ① parenthesised expression
+     — loops back up to parseExpr
+  ② number literal
+end note
+
+@enduml
