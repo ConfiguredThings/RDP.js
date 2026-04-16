@@ -4,7 +4,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DIAGRAMS_DIR="$SCRIPT_DIR/../src/diagrams"
-OUTPUT_DIR="$SCRIPT_DIR/../../static"
+OUTPUT_DIR="$SCRIPT_DIR/../static"
 
 mapfile -t puml_files < <(find "$DIAGRAMS_DIR" -maxdepth 1 -name '*.puml' | sort)
 
