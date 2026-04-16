@@ -69,11 +69,11 @@ jobs:
       - name: Install library dependencies
         run: npm ci
 
-      - name: Test
-        run: npm test
-
       - name: Build library
         run: npm run build
+      
+      - name: Test
+        run: npm test
 
       - name: Generate API docs
         run: npm run docs
