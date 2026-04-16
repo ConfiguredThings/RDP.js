@@ -11,6 +11,7 @@ skinparam ComponentBackgroundColor #cce8ff
 skinparam PackageBorderColor #7aaacc
 skinparam PackageBorderThickness 1.5
 skinparam BackgroundColor transparent
+skinparam linetype ortho
 
 skinparam component<<key>> {
   BackgroundColor #0056A3
@@ -21,18 +22,19 @@ skinparam component<<key>> {
 top to bottom direction
 
 together {
-  package "Your code" #eef3fa {
+  package "Your grammar" #eef3fa {
     component "grammar.ebnf" as grammar
-    component "Generated Parser.ts" as generated
-    component "Hand-crafted parser" as handcrafted
   }
 
   package "Toolchain (build-time)" #dce8f5 {
     component "rdp-gen CLI" as rdpgen
-    component "ABNFParser" as abnf
-    component "EBNFParser" as ebnf
     component "GrammarParser" <<key>> as grammarparser
     component "codegen.ts" as codegen
+  }
+
+  package "Your parsers" #eef3fa {
+    component "Generated Parser.ts" as generated
+    component "Hand-crafted parser" as handcrafted
   }
 }
 
@@ -48,24 +50,21 @@ together {
   }
 }
 
-' Toolchain build-time flow
+' Toolchain build-time flow (left to right across the top row)
 grammar -right-> rdpgen
-rdpgen -right-> abnf
-rdpgen -right-> ebnf
-abnf -right-> grammarparser : extends
-ebnf -right-> grammarparser : extends
-grammarparser -right-> codegen : AST
+grammarparser -up-> codegen : AST
+rdpgen ..right..> codegen : drives
 codegen -right-> generated : emits
 
-' All extends relationships lead to RDParser
+' Interpreter path (runtime, no code generation)
+grammar .down.> interp : runtime path\n(no code generation)
+interp -right-> playground : drives
+
+' All extends relationships to RDParser
 grammarparser -down-> rdparser : extends
+interp --down--> rdparser : extends
+observable -down-> rdparser : extends
 generated -down-> rdparser : extends
 handcrafted -down-> rdparser : extends
-interp -down-> rdparser : extends
-observable -down-> rdparser : extends
-
-' Alternative interpreter path (runtime, no code generation)
-grammar ..> interp : runtime path\n(no code generation)
-interp -right-> playground : drives
 
 @enduml

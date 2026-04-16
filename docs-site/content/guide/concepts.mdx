@@ -53,4 +53,4 @@ Once `parseNumber()` returns, the stack unwinds to `parseTerm`, then `parseExpr`
 
 Left recursion can always be eliminated by rewriting the grammar to use iteration (`{...}` / `X, {X}`), which is what LL(1) grammars require.
 
-**The base class is more general.** `RDParser` exposes `restorePosition`, which lets hand-written subclasses implement backtracking and parse grammars beyond LL(1). `rdp-gen` does not emit backtracking code — that is a hand-crafting concern.
+**The base class is more general.** [`RDParser`](/api/classes/RDParser.RDParser.html) exposes `restorePosition`, which lets [hand-written subclasses](/docs/extending/) implement backtracking and parse grammars beyond LL(1). [`rdp-gen`](/docs/cli/) does not emit backtracking code — that is a hand-crafting concern.

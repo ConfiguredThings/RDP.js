@@ -5,9 +5,11 @@ order: 8
 section: 'Reference'
 ---
 
+import { arithEBNF } from '@configuredthings/rdp.js/grammars'
+
 ## CLI Reference — `rdp-gen`
 
-`rdp-gen` is the code generator bundled with `@configuredthings/rdp.js`.
+`rdp-gen` is the code generator bundled with `@configuredthings/rdp.js`. The same functionality is available programmatically via the [`generateParser`](/api/functions/Generator.generateParser.html) function in the [`@configuredthings/rdp.js/generator`](/api/modules/Generator.html) module.
 It reads a grammar file (EBNF or ABNF) and emits a **strictly-typed** TypeScript
 parser class that extends `RDParser` or `ObservableRDParser`, together with
 exported discriminated-union types for every node in the parse tree.
@@ -43,7 +45,9 @@ rdp-gen <grammar> [options]
 | `--format <fmt>` | inferred from extension | Force `ebnf` or `abnf` |
 | `--parser-name <name>` | `GeneratedParser` | Class name for the generated parser |
 | `--tree-name <name>` | `ParseTree` | Type name for the generated parse tree |
-| `--observable` | off | Extend `ObservableRDParser`; adds `notifyEnter`/`notifyExit` calls |
+| `--observable` | off | Extend [`ObservableRDParser`](/docs/debugging/); adds `notifyEnter`/`notifyExit` calls |
+| `--walker` | off | Emit a `childNodes()` helper alongside the parser |
+| `--scaffold <pattern>` | — | Emit a one-time usage scaffold instead of the parser (see below) |
 | `--ast-only` | off | Emit the grammar AST as JSON (used by the playground) |
 | `--abnf-case-sensitive-strings` | off | Match ABNF quoted string literals case-sensitively |
 
@@ -66,6 +70,88 @@ Parse an ABNF grammar and write to stdout:
 ```bash
 rdp-gen protocol.abnf --format abnf --parser-name FrameParser
 ```
+
+Generate with tree-walking support (emits `childNodes()` alongside the parser):
+
+```bash
+rdp-gen grammar.ebnf --parser-name MyParser --walker --output src/MyParser.ts
+```
+
+---
+
+### `--scaffold` — generate a usage scaffold
+
+```bash
+rdp-gen <grammar> --parser-name MyParser --scaffold <pattern> --output src/MyEvaluator.ts
+```
+
+`--scaffold` emits a **one-time starter file** for a chosen usage pattern rather
+than the parser itself. Unlike the generated parser, scaffold output is **not
+regenerated** — it is a starting point that you edit freely. See also the
+[`generateScaffold`](/api/functions/Generator.generateScaffold.html) programmatic API
+and the [arithmetic worked example](/docs/arith-example/) for all four patterns
+applied to a real grammar.
+
+| Pattern | What it emits |
+|---------|--------------|
+| `evaluator` | One typed `eval{Rule}()` function per grammar rule with `RDParserException` wrapping |
+| `facade` | Domain interface, error class, entry-point function, and a `transform()` stub |
+| `pipeline` | `parse()`, `validate()`, and `transform()` stage functions with a `Result` type |
+| `walker` | A `walk()` utility using `childNodes`, plus a commented visitor stub for every rule |
+
+The typical workflow for a new grammar is:
+
+```bash
+# 1. Generate the parser (regenerate freely as the grammar evolves)
+rdp-gen date.ebnf --parser-name DateParser --output src/DateParser.ts
+
+# 2. Generate the scaffold once (edit this file; do not regenerate)
+rdp-gen date.ebnf --parser-name DateParser --scaffold facade --output src/date.ts
+```
+
+The scaffold imports the parser by a relative path (`'./DateParser.js'`), so keep
+both files in the same directory.
+
+#### `evaluator` scaffold
+
+Emits one `eval{Rule}(node: {Rule}Node): unknown` function per rule, an `evaluate()`
+entry point that calls the first rule, and wraps `RDParserException` in a plain `Error`:
+
+```bash
+rdp-gen date.ebnf --parser-name DateParser --scaffold evaluator --output src/date-eval.ts
+```
+
+#### `facade` scaffold
+
+Emits a domain `interface`, an error class (`{Base}Error extends Error`), a public
+`parse{Base}()` entry point, and a private `transform()` stub:
+
+```bash
+rdp-gen date.ebnf --parser-name DateParser --scaffold facade --output src/date.ts
+```
+
+#### `pipeline` scaffold
+
+Emits three stage functions — `parse()` (throws `SyntaxError`), `validate()` (returns
+a `{ ok: true; tree } | { ok: false; errors }` result), and `transform()` (stub) —
+plus the shared `ValidationError` interface:
+
+```bash
+rdp-gen date.ebnf --parser-name DateParser --scaffold pipeline --output src/date-pipeline.ts
+```
+
+#### `walker` scaffold
+
+Emits a `walk(root, fn)` utility using `childNodes`, plus a commented-out
+`Visitor` stub covering every rule in the grammar. Generate the parser with
+`--walker` so `childNodes` is available:
+
+```bash
+rdp-gen date.ebnf --parser-name DateParser --walker --output src/DateParser.ts
+rdp-gen date.ebnf --parser-name DateParser --scaffold walker --output src/date-walker.ts
+```
+
+See [Using the Parse Tree](/docs/parse-tree/) for worked examples of each pattern.
 
 ---
 
@@ -95,6 +181,7 @@ npm run build   # compiles src/MyParser.ts → dist/
 
 The starter `src/MyParser.ts` includes the private-constructor / static-`parse`
 boilerplate and a `#parseRoot()` stub with inline guidance on which methods to use.
+The template is produced by [`generateInitScaffold`](/api/functions/Generator.generateInitScaffold.html).
 
 To scaffold an observable parser with built-in tracing support:
 
@@ -193,6 +280,18 @@ The `kind` field is a string-literal type equal to the rule name, so the union i
 `switch` statement or `if` check and TypeScript will track the exact node shape
 in each branch.
 
+With `--walker`, `rdp-gen` also emits a `childNodes` helper:
+
+```ts
+export function childNodes(node: ParseTree): ParseTree[]
+```
+
+`childNodes` returns the direct ParseTree children of any node — every named rule
+node reachable from its fields, with arrays and anonymous sequence objects unwrapped.
+Pair it with the `Visitor<T>` type and `visit()` from `@configuredthings/rdp.js`
+to build tree walkers, linters, and analysis passes. See
+[Tree walking](/docs/parse-tree/#tree-walking) for worked examples.
+
 The generated code compiles without errors under `strict: true` and
 `noUncheckedIndexedAccess: true`; this is enforced by the `rdp-gen` test suite.
 
@@ -202,7 +301,7 @@ With `--observable`, the static method gains an optional second parameter:
 static parse(input: string, observer?: ParseObserver): RootNode
 ```
 
-Pass any `ParseObserver` implementation (e.g. `DebugObserver`, `TraceObserver`) to trace
+Pass any [`ParseObserver`](/docs/debugging/) implementation (e.g. [`DebugObserver`](/api/classes/ObservableRDParser.DebugObserver.html), [`TraceObserver`](/api/classes/ObservableRDParser.TraceObserver.html)) to trace
 the parse without constructing the instance directly.
 
 ---
@@ -211,16 +310,7 @@ the parse without constructing the instance directly.
 
 `rdp-gen` accepts ISO 14977 EBNF.
 
-```ebnf
-(* block comments use (* ... *) — they nest *)
-
-Expr   = wsp, Term, {wsp, ('+' | '-'), wsp, Term}, wsp;
-Term   = Factor, {wsp, ('*' | '/'), wsp, Factor};
-Factor = '(', Expr, ')' | Number;
-Number = Digit, {Digit};
-Digit  = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9';
-wsp    = {' '};
-```
+<pre><code className="language-ebnf">{arithEBNF}</code></pre>
 
 | Syntax | Meaning |
 |--------|---------|
@@ -236,17 +326,7 @@ wsp    = {' '};
 
 The railroad diagrams below show how these operators combine in the arithmetic grammar — a concrete example of sequencing (`,`), alternation (`|`), and repetition (`{…}`) in practice:
 
-<RailroadDiagram
-  rules={['Expr', 'Term', 'Factor']}
-  grammar={`
-Expr   = wsp, Term, {wsp, ('+' | '-'), wsp, Term}, wsp;
-Term   = Factor, {wsp, ('*' | '/'), wsp, Factor};
-Factor = '(', Expr, ')' | Number;
-Number = Digit, {Digit};
-Digit  = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9';
-wsp    = {' '};
-  `}
-/>
+<RailroadDiagram rules={['Expr', 'Term', 'Factor']} grammar={arithEBNF} />
 
 ### Grammar format — ABNF
 
@@ -258,7 +338,7 @@ to preserve exact case.
 
 ### LL(1) requirement
 
-`rdp-gen` generates LL(1) parsers only. It detects **left recursion** at
+`rdp-gen` generates [LL(1)](/docs/concepts/#ll1-grammars-and-backtracking) parsers only. It detects **left recursion** at
 generation time and exits with an error. **Common-prefix violations are detected
 at runtime** — if an alternative consumes input and then fails, the generated
 parser throws:

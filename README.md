@@ -39,6 +39,21 @@ npm run build   # compiles src/MyParser.ts → dist/
 `src/MyParser.ts` with the private-constructor / static-`parse` boilerplate
 pre-filled. Add `--observable` to extend `ObservableRDParser` instead.
 
+## Quick start — generate a parser from a grammar
+
+```bash
+# Generate a strictly-typed parser class from an EBNF grammar
+rdp-gen date.ebnf --parser-name DateParser --output src/DateParser.ts
+
+# Generate a usage scaffold for the pattern that fits your use case
+rdp-gen date.ebnf --parser-name DateParser --scaffold facade --output src/date.ts
+```
+
+`rdp-gen --scaffold <pattern>` emits a one-time typed starter file — imports,
+entry points, stubs, and error handling in place — ready to fill in. Available
+patterns: `evaluator`, `facade`, `pipeline`, `walker`. See the
+[CLI reference](https://configuredthings.github.io/RDP.js/docs/cli/) for details.
+
 ## Manual setup
 
 Install: `npm install @configuredthings/rdp.js`
@@ -65,6 +80,7 @@ Required `tsconfig.json` options:
 Full documentation is at [configuredthings.github.io/RDP.js](https://configuredthings.github.io/RDP.js), including:
 
 - [Tutorial: arithmetic parser with rdp-gen](https://configuredthings.github.io/RDP.js/docs/tutorial/)
+- [Worked example: arithmetic parser — grammar, generated parser, and all four scaffolds](https://configuredthings.github.io/RDP.js/docs/arith-example/)
 - [Extending RDParser (hand-crafted parsers)](https://configuredthings.github.io/RDP.js/docs/extending/)
 - [Debugging with ObservableRDParser](https://configuredthings.github.io/RDP.js/docs/debugging/)
 - [CLI reference](https://configuredthings.github.io/RDP.js/docs/cli/)

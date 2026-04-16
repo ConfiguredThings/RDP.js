@@ -1,4 +1,3 @@
-/** @type {import('ts-jest').JestConfigWithTsJest} */
 export default {
   preset: 'ts-jest/presets/default-esm',
   testEnvironment: 'node',
@@ -16,4 +15,5 @@ export default {
     ],
   },
   testMatch: ['**/src/__tests__/**/*.test.ts'],
+  coveragePathIgnorePatterns: ['/node_modules/', '/src/examples/'],
 }

@@ -137,6 +137,252 @@ function emitRuleType(rule: ProductionRule): string[] {
   return [`export type ${typeName} = {`, `  kind: '${rule.name}'`, ...fields, `}`]
 }
 
+/**
+ * Emit a `childNodes` helper for the given grammar.
+ *
+ * The generated function accepts any node in the `ParseTree` union and returns
+ * a flat array of its direct ParseTree children — i.e. every `XxxNode`
+ * reachable from the node's own fields, unwrapping arrays and anonymous
+ * sequence objects as needed.
+ *
+ * Terminal strings are not included; only named rule nodes are.
+ */
+export function generateWalker(ast: GrammarAST, options: TypeGenOptions = {}): string {
+  const treeName = options.treeName ?? 'ParseTree'
+  const lines: string[] = []
+
+  lines.push(`export function childNodes(node: ${treeName}): ${treeName}[] {`)
+  lines.push(`  const children: ${treeName}[] = []`)
+  lines.push(`  switch (node.kind) {`)
+
+  for (const rule of ast.rules) {
+    const bodyItems = rule.body.kind === 'sequence' ? rule.body.items : [rule.body]
+    const fieldNames = inferFieldNames(bodyItems)
+    const fieldStmts: string[] = []
+    let varIdx = 0
+
+    for (const [i, item] of bodyItems.entries()) {
+      if (bodyContainsNonTerminal(item)) {
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        const fieldName = fieldNames[i]!
+        fieldStmts.push(...childrenStmtsFor(`node.${fieldName}`, item, treeName, () => varIdx++))
+      }
+    }
+
+    if (fieldStmts.length === 0) {
+      lines.push(`    case '${rule.name}': break`)
+    } else {
+      lines.push(`    case '${rule.name}': {`)
+      for (const stmt of fieldStmts) lines.push(`      ${stmt}`)
+      lines.push(`      break`)
+      lines.push(`    }`)
+    }
+  }
+
+  lines.push(`  }`)
+  lines.push(`  return children`)
+  lines.push(`}`)
+  lines.push(``)
+
+  return lines.join('\n')
+}
+
+// ── Walker helpers ────────────────────────────────────────────────────────────
+
+/** Returns true if `body` can ever yield a ParseTree node (directly or nested). */
+function bodyContainsNonTerminal(body: RuleBody): boolean {
+  switch (body.kind) {
+    case 'nonTerminal':
+      return true
+    case 'terminal':
+    case 'coreRule':
+    case 'charValue':
+      return false
+    case 'sequence':
+    case 'alternation':
+      return body.items.some(bodyContainsNonTerminal)
+    case 'optional':
+    case 'zeroOrMore':
+    case 'oneOrMore':
+    case 'exception':
+      return bodyContainsNonTerminal(body.item)
+    case 'repetition':
+      return bodyContainsNonTerminal(body.item)
+  }
+}
+
+/**
+ * Generate imperative statements that push all ParseTree children reachable
+ * from `access` (which has the TypeScript type described by `body`) into a
+ * local `children` array.
+ */
+function childrenStmtsFor(
+  access: string,
+  body: RuleBody,
+  treeName: string,
+  nextVar: () => number,
+): string[] {
+  switch (body.kind) {
+    case 'terminal':
+    case 'coreRule':
+    case 'charValue':
+      return []
+
+    case 'nonTerminal':
+      return [`children.push(${access})`]
+
+    case 'exception':
+      return childrenStmtsFor(access, body.item, treeName, nextVar)
+
+    case 'optional': {
+      if (!bodyContainsNonTerminal(body.item)) return []
+      if (body.item.kind === 'nonTerminal') {
+        return [`if (${access} !== null) children.push(${access})`]
+      }
+      const inner = childrenStmtsFor(access, body.item, treeName, nextVar)
+      return inner.length > 0
+        ? [`if (${access} !== null) {`, ...inner.map((l) => `  ${l}`), `}`]
+        : []
+    }
+
+    case 'zeroOrMore':
+    case 'oneOrMore':
+    case 'repetition': {
+      if (!bodyContainsNonTerminal(body.item)) return []
+      if (body.item.kind === 'nonTerminal') {
+        // Simple array of ParseTree nodes — spread directly.
+        return [`children.push(...${access})`]
+      }
+      const v = `_item${nextVar()}`
+      const inner = childrenStmtsFor(v, body.item, treeName, nextVar)
+      return inner.length === 0
+        ? []
+        : [`for (const ${v} of ${access}) {`, ...inner.map((l) => `  ${l}`), `}`]
+    }
+
+    case 'sequence': {
+      // Anonymous sequence object: extract non-terminal sub-fields by name.
+      const fieldNames = inferFieldNames(body.items)
+      const result: string[] = []
+      for (const [i, item] of body.items.entries()) {
+        if (bodyContainsNonTerminal(item)) {
+          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+          result.push(...childrenStmtsFor(`${access}.${fieldNames[i]!}`, item, treeName, nextVar))
+        }
+      }
+      return result
+    }
+
+    case 'alternation': {
+      const hasNodes = body.items.some((i) => i.kind === 'nonTerminal')
+      const sequenceBranches = body.items.filter(
+        (i): i is Extract<RuleBody, { kind: 'sequence' }> =>
+          i.kind === 'sequence' && bodyContainsNonTerminal(i),
+      )
+      if (!hasNodes && sequenceBranches.length === 0) return []
+
+      // All alternatives are ParseTree nodes, no strings or sequences.
+      if (hasNodes && sequenceBranches.length === 0 && body.items.every(bodyContainsNonTerminal)) {
+        return [`children.push(${access})`]
+      }
+
+      const hasStrings = body.items.some((i) => !bodyContainsNonTerminal(i))
+
+      // Mix of nodes and strings, no anonymous sequence branches.
+      if (hasNodes && sequenceBranches.length === 0 && hasStrings) {
+        return [`if (typeof ${access} !== 'string') children.push(${access} as ${treeName})`]
+      }
+
+      // At least one anonymous sequence branch — need a local variable for narrowing.
+      const v = `_f${nextVar()}`
+      const result: string[] = [`const ${v} = ${access}`]
+      const objectBody = altObjectStmts(v, hasNodes, sequenceBranches, treeName, nextVar)
+
+      if (hasStrings) {
+        result.push(`if (typeof ${v} !== 'string') {`, ...objectBody.map((l) => `  ${l}`), `}`)
+      } else {
+        result.push(...objectBody)
+      }
+      return result
+    }
+  }
+}
+
+/**
+ * Generate statements that extract children from an object-typed alternation
+ * value `v` (already narrowed past any string branch).
+ */
+function altObjectStmts(
+  v: string,
+  hasNodes: boolean,
+  sequenceBranches: Array<Extract<RuleBody, { kind: 'sequence' }>>,
+  treeName: string,
+  nextVar: () => number,
+): string[] {
+  if (sequenceBranches.length === 0) {
+    // Only ParseTree node branches.
+    return [`children.push(${v})`]
+  }
+  if (!hasNodes) {
+    // Only anonymous sequence branches, no direct node branches.
+    return seqExtractionStmts(v, sequenceBranches, treeName, nextVar)
+  }
+  // Mix of node branches and sequence branches — discriminate with 'kind' in.
+  return [
+    `if ('kind' in ${v}) {`,
+    `  children.push(${v} as ${treeName})`,
+    `} else {`,
+    ...seqExtractionStmts(v, sequenceBranches, treeName, nextVar).map((l) => `  ${l}`),
+    `}`,
+  ]
+}
+
+/**
+ * Generate statements that extract ParseTree children from one or more anonymous
+ * sequence branches of an alternation. Multiple branches are distinguished by
+ * checking for the presence of their first non-terminal field.
+ */
+function seqExtractionStmts(
+  v: string,
+  seqItems: Array<Extract<RuleBody, { kind: 'sequence' }>>,
+  treeName: string,
+  nextVar: () => number,
+): string[] {
+  if (seqItems.length === 1) {
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    const seq = seqItems[0]!
+    const fieldNames = inferFieldNames(seq.items)
+    const result: string[] = []
+    for (const [i, item] of seq.items.entries()) {
+      if (bodyContainsNonTerminal(item)) {
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        result.push(...childrenStmtsFor(`${v}.${fieldNames[i]!}`, item, treeName, nextVar))
+      }
+    }
+    return result
+  }
+
+  // Multiple sequence branches: discriminate by first non-terminal field name.
+  const result: string[] = []
+  for (const seq of seqItems) {
+    const fieldNames = inferFieldNames(seq.items)
+    const discIdx = seq.items.findIndex(bodyContainsNonTerminal)
+    if (discIdx === -1) continue
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    const discField = fieldNames[discIdx]!
+    result.push(`if ('${discField}' in ${v}) {`)
+    for (const [i, item] of seq.items.entries()) {
+      if (bodyContainsNonTerminal(item)) {
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        const stmts = childrenStmtsFor(`${v}.${fieldNames[i]!}`, item, treeName, nextVar)
+        for (const stmt of stmts) result.push(`  ${stmt}`)
+      }
+    }
+    result.push(`}`)
+  }
+  return result
+}
+
 function camelCase(name: string): string {
   const s = name.replace(/[-_]([a-zA-Z])/g, (_, c: string) => c.toUpperCase())
   return s.charAt(0).toLowerCase() + s.slice(1)

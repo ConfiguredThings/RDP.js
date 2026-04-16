@@ -1,0 +1,40 @@
+@startuml walker-visit-dispatch
+skinparam defaultFontName monospace
+skinparam ArrowColor #2d4a70
+skinparam ArrowFontColor #2d4a70
+skinparam ArrowFontSize 10
+skinparam ParticipantBorderColor #0056A3
+skinparam ParticipantBorderThickness 1.5
+skinparam ParticipantBackgroundColor #cce8ff
+skinparam SequenceLifeLineBorderColor #7aaacc
+skinparam BackgroundColor transparent
+skinparam NoteBackgroundColor #eef3fa
+skinparam NoteBorderColor #7aaacc
+
+participant "caller" as C
+participant "visit(node, visitor)" as V
+participant "visitor['Number']" as H
+
+note over C
+  node.kind = 'Number'
+end note
+
+C -> V : visit(node, visitor)
+V -> V : look up visitor[node.kind]
+
+alt handler registered
+  V -> H : handler(node)
+  H --> V : result
+  V --> C : result
+else no handler for this kind
+  V --> C : undefined
+end
+
+note over V
+  The Visitor<ParseTree, T> type
+  makes every handler optional.
+  Use Required<Visitor<ParseTree, T>>
+  to enforce exhaustive coverage.
+end note
+
+@enduml

@@ -20,6 +20,7 @@ const ebnfMetaEBNF = read('ebnf-meta.ebnf')
 const ebnfMetaABNF = read('ebnf-meta.abnf')
 const abnfMetaEBNF = read('abnf-meta.ebnf')
 const abnfMetaABNF = read('abnf-meta.abnf')
+const arithEBNF = read('arith.ebnf')
 
 // Escape backticks and ${} so the strings are safe inside template literals.
 function escape(s) {
@@ -47,6 +48,7 @@ const output = `\
  *                   including single-quoted literals via char ranges)
  *   abnfMetaEBNF  — EBNF grammar describing the ABNF format (limited: no %x ranges)
  *   abnfMetaABNF  — ABNF grammar describing the ABNF format (self-describing)
+ *   arithEBNF     — Arithmetic expression grammar (used in worked examples)
  */
 
 /** EBNF meta-grammar written in EBNF (mirrors ebnf-meta.ebnf). */
@@ -60,6 +62,17 @@ export const abnfMetaEBNF = \`${escape(abnfMetaEBNF)}\`
 
 /** ABNF meta-grammar written in ABNF — self-describing (mirrors abnf-meta.abnf). */
 export const abnfMetaABNF = \`${escape(abnfMetaABNF)}\`
+
+/**
+ * Arithmetic expression grammar (EBNF) — used throughout the worked examples.
+ *
+ * Supports +, -, *, / with correct precedence via Expr → Term → Factor.
+ * Parentheses for grouping; integers are one or more decimal digits.
+ * Optional whitespace is handled by the \`wsp\` rule.
+ *
+ * Source: src/grammars/arith.ebnf
+ */
+export const arithEBNF = \`${escape(arithEBNF)}\`
 `
 
 const outPath = resolve(grammarsDir, 'index.ts')

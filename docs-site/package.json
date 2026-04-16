@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "copy-assets": "node scripts/copy-assets.mjs",
-    "diagrams": "plantuml -tsvg src/diagrams/architecture.puml src/diagrams/pipeline.puml src/diagrams/cst-vs-domain.puml src/diagrams/pattern-facade.puml src/diagrams/pattern-evaluator.puml src/diagrams/parser-call-graph.puml src/diagrams/observer-sequence.puml src/diagrams/bootstrapping-loop.puml src/diagrams/playground-data-flow.puml src/diagrams/ll1-decision.puml -o ../../static/",
+    "diagrams": "bash scripts/render-diagrams.sh",
     "render-header": "tsx scripts/render-site-header.tsx",
     "predevelop": "npm run copy-assets && npm run diagrams && npm run render-header",
     "develop": "NODE_OPTIONS=--max-old-space-size=4096 gatsby develop",

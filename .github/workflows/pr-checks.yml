@@ -19,7 +19,7 @@ jobs:
 
       - name: Build library
         run: npm run build
-      
+
       - name: Test
         run: npm test
 

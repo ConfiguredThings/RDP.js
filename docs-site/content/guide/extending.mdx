@@ -15,7 +15,7 @@ and implement each production rule as a method.
 Keep the constructor `private` and expose a `static parse()` entry point. This makes the
 one-shot lifecycle explicit — the instance is created, used once, then discarded.
 
-> **Note:** `rdp-gen` generates this pattern automatically. If you are using the code
+> **Note:** [`rdp-gen`](/docs/cli/) generates this pattern automatically. If you are using the code
 > generator, you get `private constructor` and `static parse(input: string)` for free.
 
 ```ts
@@ -46,14 +46,14 @@ export class MyParser extends RDParser {
 | `expectChar(b, label)` | Like `matchChar` but throws `RDParserException` on mismatch |
 | `atEnd()` | Returns `true` when all input has been consumed |
 | `getPosition()` | Returns the current byte offset |
-| `restorePosition(pos)` | Backtracks to a saved position |
+| `restorePosition(pos)` | Backtracks to a saved position (enables [grammars beyond LL(1)](/docs/concepts/#ll1-grammars-and-backtracking)) |
 | `error(message)` | Throws `RDParserException` with position information |
 | `decodeSlice(start, end)` | Decodes a UTF-8 slice of the source buffer as a string |
 
 ### Worked example — arithmetic calculator
 
 This parser evaluates arithmetic expressions, returning a `number` directly rather than a
-parse tree. It implements the same grammar as the [rdp-gen tutorial](/docs/tutorial/):
+parse tree. It implements the same grammar as the [rdp-gen tutorial](/docs/tutorial/) — see [`RDParserException`](/api/classes/RDParser.RDParserException.html) for the exception type thrown on parse failure.
 
 ```
 Expr   = wsp, Term, {wsp, ('+' | '-'), wsp, Term}, wsp;

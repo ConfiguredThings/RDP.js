@@ -19,7 +19,13 @@ import type { GrammarAST, RuleBody, CoreRuleName } from './ast.js'
 import { EBNFParser } from './ebnf-parser.js'
 import { ABNFParser } from './abnf-parser.js'
 import { detectLeftRecursion } from './left-recursion.js'
-import { generateTypes, typeForBody, arrayType, inferFieldNames } from './type-gen.js'
+import {
+  generateTypes,
+  generateWalker,
+  typeForBody,
+  arrayType,
+  inferFieldNames,
+} from './type-gen.js'
 
 /** Options controlling what `generateParser` emits. */
 export type GeneratorOptions = {
@@ -58,6 +64,19 @@ export type GeneratorOptions = {
    * @default false
    */
   caseSensitiveStrings?: boolean
+
+  /**
+   * When `true`, emit a `childNodes(node: ParseTree): ParseTree[]` helper alongside
+   * the parser and types. Use this when building tree walkers, linters, formatters,
+   * or any tool that needs to traverse the full parse tree structure.
+   *
+   * Pair with the `Visitor<T>` type and `visit()` function from
+   * `@configuredthings/rdp.js` to dispatch per-node logic without writing
+   * explicit `switch` statements.
+   *
+   * @default false
+   */
+  walker?: boolean
 }
 
 /**
@@ -113,7 +132,9 @@ export function generateParser(source: string, options: GeneratorOptions = {}): 
   lines.push(``)
   lines.push(`export class ${parserName} extends ${baseClass} {`)
   lines.push(``)
-  lines.push(`  private constructor(source: DataView) { super(source) }`)
+  lines.push(`  private constructor(source: DataView) {`)
+  lines.push(`    super(source)`)
+  lines.push(`  }`)
 
   // Emit static entry point + instance parse: calls first rule, enforces full consumption, throws on failure
   const firstRule = ast.rules[0]
@@ -189,6 +210,11 @@ export function generateParser(source: string, options: GeneratorOptions = {}): 
   // Append parse tree types
   lines.push(generateTypes(ast, { treeName }))
 
+  // Optionally append the childNodes walker helper
+  if (options.walker) {
+    lines.push(generateWalker(ast, { treeName }))
+  }
+
   return lines.join('\n')
 }
 
@@ -249,7 +275,6 @@ function emitMethod(name: string, body: RuleBody, observable: boolean): string[]
   if (observable) {
     lines.push(`  this.notifyEnter('${name}')`)
   }
-  lines.push(`  const start = this.getPosition()`)
 
   const topFail = observable
     ? `return this.#failNotify(start, '${name}')`
@@ -261,11 +286,21 @@ function emitMethod(name: string, body: RuleBody, observable: boolean): string[]
   const fieldNames = inferFieldNames(bodyItems)
   const itemVars: string[] = []
 
+  // Generate body lines first so we can detect whether `start` is actually
+  // referenced (it won't be for rules whose body can never fail, e.g. zeroOrMore).
+  const bodyLines: string[] = []
   for (const item of bodyItems) {
     const { lines: captureLines, varName } = emitCapture(item, observable, topFail)
-    lines.push(...captureLines.map((l) => `  ${l}`))
+    bodyLines.push(...captureLines.map((l) => `  ${l}`))
     itemVars.push(varName)
   }
+
+  const startUsed = bodyLines.some((l) => l.includes('start'))
+  if (!startUsed) {
+    lines.push(`  // eslint-disable-next-line @typescript-eslint/no-unused-vars`)
+  }
+  lines.push(`  const start = this.getPosition()`)
+  lines.push(...bodyLines)
 
   if (observable) {
     lines.push(`  this.notifyExit('${name}', true)`)
@@ -364,7 +399,6 @@ function emitCapture(
       } else {
         // Multiple specific codepoints: try each with readChar (no advance on failure)
         const foundL = `found_ch${nextCountFor('found_ch')}`
-        lines.push(`// eslint-disable-next-line @typescript-eslint/no-non-null-assertion`)
         lines.push(`let ${v}!: string`)
         lines.push(`${foundL}: {`)
         for (const cp of body.codepoints) {
@@ -406,11 +440,7 @@ function emitCapture(
       const hint = varHint(body)
       const v = namedVar('alt')
       const foundLabel = `found_${hint}${nextCountFor('found_' + hint)}`
-      const lines: string[] = [
-        `// eslint-disable-next-line @typescript-eslint/no-non-null-assertion`,
-        `let ${v}!: ${type}`,
-        `${foundLabel}: {`,
-      ]
+      const lines: string[] = [``, `let ${v}!: ${type}`, `${foundLabel}: {`]
       for (const item of body.items) {
         const altLabel = `alt_${varHint(item)}${nextCountFor('alt_' + varHint(item))}`
         const savedPos = namedVar('pos')

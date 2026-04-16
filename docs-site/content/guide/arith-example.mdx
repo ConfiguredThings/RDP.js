@@ -1,0 +1,280 @@
+---
+title: 'Worked Example: Arithmetic Parser'
+slug:  'arith-example'
+order: 10
+section: 'Examples'
+---
+
+import { arithEBNF } from '@configuredthings/rdp.js/grammars'
+
+## Worked Example: Arithmetic Parser
+
+This page walks through the full lifecycle of a grammar — from `.ebnf` source
+file to generated parser to four scaffold patterns — using a simple arithmetic
+expression grammar as the running example.
+
+All files live in [`src/examples/arith/`](https://github.com/ConfiguredThings/RDP.js/tree/main/src/examples/arith/)
+and are documented in the [ArithExample API module](/api/modules/ArithExample.html).
+Regenerate them any time the grammar changes with:
+
+```bash
+npm run generate:examples
+```
+
+---
+
+### The grammar
+
+The arithmetic grammar lives in `src/grammars/arith.ebnf`.
+It handles `+`, `-`, `*`, `/` with correct precedence (via `Expr → Term → Factor`),
+parenthesised sub-expressions, multi-digit integers, and optional whitespace.
+
+<pre><code className="language-ebnf">{arithEBNF}</code></pre>
+
+The railroad diagrams for the three top-level rules:
+
+<RailroadDiagram rules={['Expr', 'Term', 'Factor']} grammar={arithEBNF} />
+
+---
+
+### Step 1 — generate the parser
+
+```bash
+rdp-gen src/grammars/arith.ebnf \
+  --parser-name ArithParser \
+  --tree-name ArithTree \
+  --walker \
+  --output src/examples/arith/ArithParser.ts
+```
+
+`--walker` adds a `childNodes(node: ArithTree): ArithTree[]` helper alongside the
+parser and types. This is needed by the walker scaffold in Step 5.
+
+The generated [`ArithParser`](/api/classes/ArithExample.ArithParser.html) has a
+`static parse(input: string): ExprNode` entry point and one private method per
+production rule. The exported [`ArithTree`](/api/types/ArithExample.ArithTree.html)
+union covers all six node kinds:
+
+```ts
+export type ArithTree =
+  | ExprNode
+  | TermNode
+  | FactorNode
+  | NumberNode
+  | DigitNode
+  | WspNode
+```
+
+Each node carries a `kind` field that equals the rule name, making it a
+[proper TypeScript discriminated union](/docs/concepts/#ll1-grammars-and-backtracking) —
+narrow on `kind` with `switch` or `if` and TypeScript tracks the exact shape.
+
+---
+
+### Step 2 — choose a scaffold
+
+Run the scaffolds once, then edit the output freely — they are **not** regenerated.
+
+| Scaffold | Command | Best for |
+|----------|---------|----------|
+| `evaluator` | `--scaffold evaluator` | Recursive evaluation / interpretation |
+| `facade` | `--scaffold facade` | Hiding the parser behind a clean domain API |
+| `pipeline` | `--scaffold pipeline` | Multi-stage parse → validate → transform |
+| `walker` | `--scaffold walker` | Tree traversal with per-node visitor dispatch |
+
+---
+
+### Scaffold: evaluator
+
+```bash
+rdp-gen src/grammars/arith.ebnf \
+  --parser-name ArithParser \
+  --scaffold evaluator \
+  --output src/examples/arith/arith-evaluator.ts
+```
+
+Emits one `eval{Rule}()` function per grammar rule, an `evaluate()` entry point,
+and wraps [`RDParserException`](/api/classes/RDParser.RDParserException.html) in
+a plain `Error`. Replace `unknown` with your concrete return types, then fill in
+the function bodies.
+
+```ts
+// arith-evaluator.ts — edit freely; not regenerated
+
+import {
+  ArithParser,
+  type ExprNode,
+  type TermNode,
+  type FactorNode,
+  type NumberNode,
+  type DigitNode,
+  type WspNode,
+} from './ArithParser.js'
+import { RDParserException } from '@configuredthings/rdp.js'
+
+export function evaluate(input: string): unknown {
+  try {
+    return evalExpr(ArithParser.parse(input))
+  } catch (e) {
+    if (e instanceof RDParserException) throw new Error(`parse error: "${input}"`)
+    throw e
+  }
+}
+
+function evalExpr(node: ExprNode): unknown {
+  throw new Error('not implemented')
+}
+
+function evalTerm(node: TermNode): unknown {
+  throw new Error('not implemented')
+}
+
+// … one function per rule …
+```
+
+Full file: [`arith-evaluator.ts`](/api/functions/ArithExample.evaluate.html)
+
+---
+
+### Scaffold: facade
+
+```bash
+rdp-gen src/grammars/arith.ebnf \
+  --parser-name ArithParser \
+  --scaffold facade \
+  --output src/examples/arith/arith-facade.ts
+```
+
+Emits a domain `interface`, a typed error class, a public `parse{Base}()` entry
+point, and a private `transform()` stub. The parser is completely hidden — callers
+only see `parseArith()` and `ArithError`.
+
+```ts
+// arith-facade.ts — edit freely; not regenerated
+
+import { ArithParser, type ExprNode } from './ArithParser.js'
+import { RDParserException } from '@configuredthings/rdp.js'
+
+export interface Arith {
+  // TODO: define your domain type
+}
+
+export class ArithError extends Error {
+  constructor(input: string) {
+    super(`invalid input: "${input}"`)
+    this.name = 'ArithError'
+  }
+}
+
+export function parseArith(input: string): Arith {
+  let tree: ExprNode
+  try {
+    tree = ArithParser.parse(input)
+  } catch (e) {
+    if (e instanceof RDParserException) throw new ArithError(input)
+    throw e
+  }
+  return transform(tree)
+}
+
+function transform(tree: ExprNode): Arith {
+  throw new Error('not implemented')
+}
+```
+
+Full file: [`arith-facade.ts`](/api/functions/ArithExample.parseArith.html)
+
+---
+
+### Scaffold: pipeline
+
+```bash
+rdp-gen src/grammars/arith.ebnf \
+  --parser-name ArithParser \
+  --scaffold pipeline \
+  --output src/examples/arith/arith-pipeline.ts
+```
+
+Emits three stage functions — `parse()` (throws `SyntaxError`), `validate()`
+(returns a `{ ok: true; tree } | { ok: false; errors }` result type), and
+`transform()` (stub). Use this when validation logic is substantial or needs
+to be testable independently of parsing.
+
+```ts
+// arith-pipeline.ts — edit freely; not regenerated
+
+export function parse(input: string): ExprNode { … }
+
+export function validate(
+  tree: ExprNode,
+): { ok: true; tree: ExprNode } | { ok: false; errors: ValidationError[] } { … }
+
+export function transform(tree: ExprNode): Arith { … }
+```
+
+Full file: [`arith-pipeline.ts`](/api/functions/ArithExample.parse.html)
+
+---
+
+### Scaffold: walker
+
+```bash
+rdp-gen src/grammars/arith.ebnf \
+  --parser-name ArithParser \
+  --tree-name ArithTree \
+  --scaffold walker \
+  --output src/examples/arith/arith-walker.ts
+```
+
+Requires `--walker` on the parser generation step (Step 1) so that `childNodes`
+is available. Emits a `walk(root, fn)` utility and a commented `Visitor` stub
+covering every rule in the grammar:
+
+```ts
+// arith-walker.ts — edit freely; not regenerated
+
+import { ArithParser, childNodes, type ArithTree } from './ArithParser.js'
+import { visit, type Visitor } from '@configuredthings/rdp.js'
+
+export function walk(root: ArithTree, fn: (node: ArithTree) => void): void {
+  fn(root)
+  for (const child of childNodes(root)) walk(child, fn)
+}
+
+// Add handlers for the node kinds you care about.
+// Use Required<Visitor<ArithTree>> to enforce that every kind is handled.
+//
+// const visitor: Visitor<ArithTree> = {
+//   'Expr':   (node) => { /* ... */ },
+//   'Term':   (node) => { /* ... */ },
+//   'Factor': (node) => { /* ... */ },
+//   'Number': (node) => { /* ... */ },
+//   'Digit':  (node) => { /* ... */ },
+//   'wsp':    (node) => { /* ... */ },
+// }
+//
+// walk(ArithParser.parse(input), (node) => visit(node, visitor))
+```
+
+Full file: [`arith-walker.ts`](/api/functions/ArithExample.walk.html)
+
+---
+
+### Grammar AST
+
+The [grammar AST](/api/variables/ArithExample.arithAST.html) is the intermediate
+representation produced by `EBNFParser.parse(arithEBNF)`. It is a
+[`GrammarAST`](/api/interfaces/Generator.GrammarAST.html) — an array of
+[`ProductionRule`](/api/interfaces/Generator.ProductionRule.html) objects, one per
+rule in the grammar.
+
+```ts
+import { EBNFParser } from '@configuredthings/rdp.js/generator'
+import { arithEBNF } from '@configuredthings/rdp.js/grammars'
+
+const ast = EBNFParser.parse(arithEBNF)
+// ast.rules → [{ name: 'Expr', … }, { name: 'Term', … }, …]
+```
+
+The AST is what `generateParser` and `generateScaffold` receive internally — you
+can inspect it to understand how rdp.js represents your grammar before code is emitted.
