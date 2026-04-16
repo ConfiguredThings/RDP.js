@@ -35,6 +35,7 @@
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
   --max-width:     860px;
   --sidebar-width: 240px;
+  --toc-width:     220px;
   --header-h:       56px;
 }
 
@@ -84,7 +85,7 @@ a:hover { color: var(--color-link-hover); text-decoration: underline; }
 }
 
 .site-header-inner {
-  max-width: calc(var(--max-width) + var(--sidebar-width) + 4rem);
+  max-width: calc(var(--max-width) + var(--sidebar-width) + var(--toc-width) + 7rem);
   margin: 0 auto;
   display: flex;
   align-items: center;
@@ -138,7 +139,7 @@ a:hover { color: var(--color-link-hover); text-decoration: underline; }
 /* ── Page layout ──────────────────────────────────────────────────────────── */
 .page-layout {
   display: flex;
-  max-width: calc(var(--max-width) + var(--sidebar-width) + 4rem);
+  max-width: calc(var(--max-width) + var(--sidebar-width) + var(--toc-width) + 7rem);
   margin: 0 auto;
   padding: 0 1.5rem;
   min-height: calc(100vh - var(--header-h));
@@ -216,6 +217,102 @@ a:hover { color: var(--color-link-hover); text-decoration: underline; }
   padding: 2.5rem 0 4rem 2.5rem;
   max-width: var(--max-width);
 }
+
+/* ── Sticky section heading ───────────────────────────────────────────────── */
+/* Pinned just below the site header; shows the current h2 while mid-section */
+.sticky-section-heading {
+  position: sticky;
+  top: var(--header-h);
+  z-index: 10;
+  /* Extend to left/right edges of doc-main by cancelling its padding */
+  margin: -2.5rem -1rem 0 -2.5rem;
+  padding: 0 1rem 0 2.5rem;
+  height: 2.25rem;
+  display: flex;
+  align-items: center;
+  background: color-mix(in srgb, var(--color-bg) 94%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.15s;
+  overflow: hidden;
+}
+.sticky-section-heading--visible {
+  border-bottom-color: var(--color-border);
+}
+.sticky-section-heading span {
+  font-family: var(--font-heading);
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.sticky-section-heading--visible span {
+  opacity: 1;
+}
+
+/* ── Right-hand TOC sidebar ───────────────────────────────────────────────── */
+.toc-sidebar {
+  width: var(--toc-width);
+  flex-shrink: 0;
+  padding: 2rem 0 2rem 1.5rem;
+  border-left: 1px solid var(--color-border);
+  position: sticky;
+  top: var(--header-h);
+  height: calc(100vh - var(--header-h));
+  overflow-y: auto;
+  font-size: 0.82rem;
+  /* Hide on narrower viewports — added in the responsive section below */
+}
+
+.toc-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--color-text-muted);
+  margin-bottom: 0.6rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.toc-sidebar ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.toc-item { margin: 0; }
+
+.toc-item a {
+  display: block;
+  padding: 0.22rem 0.4rem;
+  border-radius: 4px;
+  color: var(--color-text-muted);
+  font-weight: 400;
+  line-height: 1.4;
+  transition: background 0.1s, color 0.1s;
+}
+.toc-item a:hover {
+  background: var(--color-bg-soft);
+  color: var(--color-text);
+  text-decoration: none;
+}
+.toc-item a.active {
+  color: var(--color-accent);
+  font-weight: 600;
+  background: var(--color-accent-soft);
+  border-left: 2px solid var(--color-accent);
+  padding-left: calc(0.4rem - 2px);
+}
+
+/* h3 items are indented relative to h2 */
+.toc-level-3 a { padding-left: 1rem; }
+.toc-level-3 a.active { padding-left: calc(1rem - 2px); }
 
 /* ── Prose ────────────────────────────────────────────────────────────────── */
 .doc-content h1 { font-family: var(--font-heading); font-size: 1.75rem; margin-bottom: 1.25rem; line-height: 1.3; }
@@ -1148,10 +1245,22 @@ a:hover { color: var(--color-link-hover); text-decoration: underline; }
 .docs-mobile-toggle-icon { font-size: 1.1rem; line-height: 1; transition: transform 0.2s; }
 .docs-mobile-toggle.open .docs-mobile-toggle-icon { transform: rotate(90deg); }
 
+/* ── Responsive: TOC sidebar hidden below 1200px ─────────────────────────── */
+/* At narrower widths there isn't room for all three columns; the sticky      */
+/* section heading already gives orientation on small screens.                */
+@media (max-width: 1200px) {
+  .toc-sidebar { display: none; }
+}
+
 /* ── Responsive: tablet (≤ 900px) — tighten layout ───────────────────────── */
 @media (max-width: 900px) {
   :root { --sidebar-width: 200px; }
   .doc-main { padding: 2rem 0 3rem 1.75rem; }
+  /* Adjust sticky heading margins to match reduced padding */
+  .sticky-section-heading {
+    margin: -2rem -0.5rem 0 -1.75rem;
+    padding: 0 0.5rem 0 1.75rem;
+  }
 }
 
 /* ── Responsive: mobile (≤ 767px) ────────────────────────────────────────── */
@@ -1249,6 +1358,11 @@ a:hover { color: var(--color-link-hover); text-decoration: underline; }
   .doc-main {
     padding: 1.5rem 1rem 3rem;
     width: 100%;
+  }
+  /* Adjust sticky heading margins to match mobile padding */
+  .sticky-section-heading {
+    margin: -1.5rem -1rem 0 -1rem;
+    padding: 0 1rem;
   }
   .doc-content h1 { font-size: 1.5rem; }
   .doc-content h2 { font-size: 1.2rem; }

@@ -1,9 +1,10 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { graphql, Link, withPrefix, type PageProps, type HeadFC } from 'gatsby'
 import { MDXProvider } from '@mdx-js/react'
 import DocsSidebar from '../components/DocsSidebar'
 import { SiteHeader } from '../components/SiteHeader'
 import { DocRailroadDiagram } from '../components/DocRailroadDiagram'
+import { TableOfContents } from '../components/TableOfContents'
 
 interface PageContext {
   id: string
@@ -32,6 +33,35 @@ export default function DocPageTemplate({
   const { frontmatter } = data.mdx
   const { prev, next } = pageContext
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [stickyHeading, setStickyHeading] = useState<string | null>(null)
+
+  // Track which h2 section the user is currently reading and surface it
+  // as a sticky label pinned just below the site header.
+  useEffect(() => {
+    const getHeaderH = () =>
+      parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--header-h')) || 56
+
+    const update = () => {
+      const headerH = getHeaderH()
+      const headings = Array.from(
+        document.querySelectorAll<HTMLElement>('.doc-content h2, .doc-content h3'),
+      )
+      let current: HTMLElement | null = null
+      for (const h of headings) {
+        // A heading is "past" when its bottom edge has scrolled above the sticky bar
+        if (h.getBoundingClientRect().bottom <= headerH + 2) {
+          current = h
+        } else {
+          break
+        }
+      }
+      setStickyHeading(current ? (current.textContent ?? null) : null)
+    }
+
+    window.addEventListener('scroll', update, { passive: true })
+    update()
+    return () => window.removeEventListener('scroll', update)
+  }, [])
 
   return (
     <>
@@ -51,6 +81,14 @@ export default function DocPageTemplate({
         <DocsSidebar currentSlug={frontmatter.slug} mobileOpen={sidebarOpen} />
 
         <main className="doc-main">
+          {/* Sticky section label — appears once the first h2 scrolls past the header */}
+          <div
+            className={`sticky-section-heading${stickyHeading ? ' sticky-section-heading--visible' : ''}`}
+            aria-hidden="true"
+          >
+            <span>{stickyHeading ?? ''}</span>
+          </div>
+
           <article className="doc-content">
             <MDXProvider components={mdxComponents}>{children}</MDXProvider>
           </article>
@@ -75,6 +113,8 @@ export default function DocPageTemplate({
             )}
           </nav>
         </main>
+
+        <TableOfContents />
       </div>
     </>
   )
