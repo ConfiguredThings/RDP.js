@@ -207,4 +207,26 @@ describe('generateParser — grammar construct coverage', () => {
     // 'H' (0x48) should appear as a literal character match, not lowercased
     expect(output).toContain('0x48')
   })
+
+  // ── Regression: repeated alternation of mixed types ───────────────────────
+  // Bug: `*(A / B)` was emitting `A | B[]` (parsed by TS as `A | (B[])`) instead
+  // of `(A | B)[]` in both variable declarations and exported type aliases.
+
+  it('emits (A | B)[] not A | B[] for zeroOrMore of a mixed-type alternation', () => {
+    const output = generateParser(`rule = {'a' | foo};\nfoo = 'b';`)
+    expect(output).toContain('(string | FooNode)[]')
+    expect(output).not.toContain('string | FooNode[]')
+  })
+
+  it('emits (A | B)[] not A | B[] for oneOrMore of a mixed-type alternation', () => {
+    const output = generateParser(`rule = 'a' | foo, {'a' | foo};\nfoo = 'b';`)
+    expect(output).toContain('(string | FooNode)[]')
+    expect(output).not.toContain('string | FooNode[]')
+  })
+
+  it('emits (A | B)[] not A | B[] for ABNF bounded repetition of a mixed-type alternation', () => {
+    const output = generateParser(`rule = 1*3("a" / foo)\nfoo = "b"`, { format: 'abnf' })
+    expect(output).toContain('(string | FooNode)[]')
+    expect(output).not.toContain('string | FooNode[]')
+  })
 })
