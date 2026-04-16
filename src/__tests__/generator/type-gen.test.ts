@@ -136,4 +136,30 @@ describe('typeForBody', () => {
     }
     expect(typeForBody(body)).toBe('string[]')
   })
+
+  // ── Regression: repeated alternation of mixed types ───────────────────────
+  // Bug: `*(A / B)` was emitting `A | B[]` (parsed by TS as `A | (B[])`) instead
+  // of `(A | B)[]`. The fix wraps union item types in parentheses.
+
+  const mixedAlt: RuleBody = {
+    kind: 'alternation',
+    items: [
+      { kind: 'terminal', value: 'a' },
+      { kind: 'nonTerminal', name: 'foo' },
+    ],
+  }
+
+  it('wraps union item type in parentheses for zeroOrMore of alternation', () => {
+    expect(typeForBody({ kind: 'zeroOrMore', item: mixedAlt })).toBe('(string | FooNode)[]')
+  })
+
+  it('wraps union item type in parentheses for oneOrMore of alternation', () => {
+    expect(typeForBody({ kind: 'oneOrMore', item: mixedAlt })).toBe('(string | FooNode)[]')
+  })
+
+  it('wraps union item type in parentheses for repetition of alternation', () => {
+    expect(typeForBody({ kind: 'repetition', min: 0, max: 5, item: mixedAlt })).toBe(
+      '(string | FooNode)[]',
+    )
+  })
 })

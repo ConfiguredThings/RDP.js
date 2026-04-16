@@ -2,7 +2,7 @@
 
 ![projectmascot](recursquirrel.svg)
 
-A minimal, typed base class for writing recursive descent parsers in TypeScript — plus an optional grammar interpreter and a code generator (`rdp-gen`) that produces typed parser classes from EBNF or ABNF grammars.
+A minimal, typed base class for writing recursive descent parsers in TypeScript — plus an optional grammar interpreter and a code generator (`rdp-gen`) that produces strictly-typed TypeScript parser classes from EBNF or ABNF grammars.
 
 ## What is `@configuredthings/rdp.js`?
 
@@ -10,7 +10,7 @@ A minimal, typed base class that handles buffer management and position tracking
 
 Key components:
 - **`RDParser`** — base class; subclass and implement each production rule as a method
-- **`rdp-gen`** — CLI; reads an ISO 14977 EBNF or RFC 5234 ABNF grammar file and emits a fully typed TypeScript parser class
+- **`rdp-gen`** — CLI; reads an ISO 14977 EBNF or RFC 5234 ABNF grammar file and emits a strictly-typed TypeScript parser class and exported discriminated-union parse-tree types
 - **`GrammarInterpreter`** — runtime interpreter; execute grammars without a code-generation step
 - **`ObservableRDParser`** — opt-in parse tracing via an attached `ParseObserver`
 
@@ -51,8 +51,8 @@ Required `tsconfig.json` options:
 ```
 
 - `target: ES2022` — required for native `#` private fields
-- `strict: true` — generated code is written to strict standards
-- `noUncheckedIndexedAccess: true` — all array accesses are null-aware
+- `strict: true` — the generated parser and its parse-tree types are verified to compile cleanly under this setting
+- `noUncheckedIndexedAccess: true` — all array accesses in the generated code are null-aware
 - `moduleResolution: node16` or `bundler` — required for the package exports map
 
 ## Documentation

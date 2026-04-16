@@ -19,7 +19,7 @@ import type { GrammarAST, RuleBody, CoreRuleName } from './ast.js'
 import { EBNFParser } from './ebnf-parser.js'
 import { ABNFParser } from './abnf-parser.js'
 import { detectLeftRecursion } from './left-recursion.js'
-import { generateTypes, typeForBody } from './type-gen.js'
+import { generateTypes, typeForBody, arrayType } from './type-gen.js'
 
 /** Options controlling what `generateParser` emits. */
 export type GeneratorOptions = {
@@ -438,14 +438,13 @@ function emitCapture(
     }
 
     case 'zeroOrMore': {
-      const type = typeForBody(body.item)
       const arr = namedVar(varHint(body.item) + 's')
       const loopLabel = `loop_${varHint(body.item)}${nextId()}`
       const savedPos = namedVar('pos')
       const innerFail = `{ this.restorePosition(${savedPos}); break ${loopLabel} }`
       const inner = emitCapture(body.item, observable, innerFail)
       const lines: string[] = [
-        `const ${arr}: ${type}[] = []`,
+        `const ${arr}: ${arrayType(body.item)} = []`,
         `${loopLabel}: while (true) {`,
         `  const ${savedPos} = this.getPosition()`,
         ...inner.lines.map((l) => `  ${l}`),
@@ -456,7 +455,6 @@ function emitCapture(
     }
 
     case 'oneOrMore': {
-      const type = typeForBody(body.item)
       const arr = namedVar(varHint(body.item) + 's')
       // First occurrence is mandatory (uses outer failStmt)
       const first = emitCapture(body.item, observable, failStmt)
@@ -467,7 +465,7 @@ function emitCapture(
       const rest = emitCapture(body.item, observable, innerFail)
       const lines: string[] = [
         ...first.lines,
-        `const ${arr}: ${type}[] = [${first.varName}]`,
+        `const ${arr}: ${arrayType(body.item)} = [${first.varName}]`,
         `${loopLabel}: while (true) {`,
         `  const ${savedPos} = this.getPosition()`,
         ...rest.lines.map((l) => `  ${l}`),
@@ -498,7 +496,6 @@ function emitCapture(
     }
 
     case 'repetition': {
-      const type = typeForBody(body.item)
       const arr = namedVar(varHint(body.item) + 's')
       const repLabel = `rep_${varHint(body.item)}${nextId()}`
       const savedPos = namedVar('pos')
@@ -506,7 +503,7 @@ function emitCapture(
       const inner = emitCapture(body.item, observable, innerFail)
       const maxCond = body.max !== null ? `count < ${body.max}` : 'true'
       const lines: string[] = [
-        `const ${arr}: ${type}[] = []`,
+        `const ${arr}: ${arrayType(body.item)} = []`,
         `{`,
         `  let count = 0`,
         `  ${repLabel}: while (${maxCond}) {`,

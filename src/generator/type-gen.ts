@@ -76,10 +76,20 @@ export function typeForBody(body: RuleBody): string {
     case 'zeroOrMore':
     case 'oneOrMore':
     case 'repetition':
-      return `${typeForBody(body.item)}[]`
+      return arrayType(body.item)
     case 'exception':
       return typeForBody(body.item)
   }
+}
+
+/**
+ * Returns the TypeScript array type for a repeated grammar body.
+ * Wraps union item types in parentheses so `A | B | C` becomes `(A | B | C)[]`
+ * rather than the incorrectly-parsed `A | B | C[]`.
+ */
+export function arrayType(item: RuleBody): string {
+  const inner = typeForBody(item)
+  return inner.includes(' | ') ? `(${inner})[]` : `${inner}[]`
 }
 
 function emitRuleType(rule: ProductionRule): string[] {
