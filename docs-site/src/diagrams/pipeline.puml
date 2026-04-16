@@ -1,0 +1,40 @@
+@startuml pipeline
+skinparam componentStyle rectangle
+skinparam defaultFontName monospace
+skinparam ArrowColor #2d4a70
+skinparam ArrowFontColor #2d4a70
+skinparam ArrowFontSize 11
+skinparam ComponentBorderColor #0056A3
+skinparam ComponentBorderThickness 1.5
+skinparam ComponentBackgroundColor #cce8ff
+skinparam PackageBorderColor #7aaacc
+skinparam PackageBorderThickness 1.5
+skinparam BackgroundColor transparent
+
+top to bottom direction
+
+() " string " as input
+
+component "parse" as parse
+component "validate" as validate
+component "transform" as transform
+
+() " Domain " as output
+
+input -down-> parse
+parse -down-> validate : ParseTree
+validate -down-> transform : ParseTree
+transform -down-> output
+
+note right of parse
+  throws RDParserException
+  on malformed syntax
+end note
+
+note right of validate
+  returns Result<ParseTree, Error[]>
+  accumulates all semantic errors
+  before returning
+end note
+
+@enduml

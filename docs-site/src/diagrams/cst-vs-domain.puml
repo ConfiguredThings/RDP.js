@@ -1,0 +1,56 @@
+@startuml cst-vs-domain
+skinparam componentStyle rectangle
+skinparam defaultFontName monospace
+skinparam ArrowColor #2d4a70
+skinparam ArrowFontColor #2d4a70
+skinparam ArrowFontSize 10
+skinparam ObjectBorderColor #0056A3
+skinparam ObjectBorderThickness 1.5
+skinparam ObjectBackgroundColor #cce8ff
+skinparam PackageBorderColor #7aaacc
+skinparam PackageBorderThickness 1.5
+skinparam BackgroundColor transparent
+
+top to bottom direction
+
+package "Parse tree  (mirrors grammar)" #eef3fa {
+  object "DateNode" as date {
+    kind = "Date"
+    item0: YearNode
+    item2: MonthNode
+    item4: DayNode
+  }
+
+  object "YearNode" as year {
+    kind = "Year"
+    item0: DigitNode
+    item1: DigitNode
+    item2: DigitNode
+    item3: DigitNode
+  }
+
+  object "DigitNode" as digit {
+    kind = "Digit"
+    item0: "2"
+  }
+
+  date -> year : item0
+  year -> digit : item0..item3
+}
+
+package "Domain object  (what callers need)" #dce8f5 {
+  object "CalendarDate" as domain #7aaacc {
+    year  = 2024
+    month = 3
+    day   = 15
+  }
+}
+
+date -[hidden]r-> domain
+
+note bottom of digit
+  Four DigitNodes per year,
+  two per month, two per day
+end note
+
+@enduml

@@ -1,0 +1,341 @@
+---
+title: 'Using the Parse Tree'
+slug:  'using-parsers'
+order: 5
+---
+
+export const EXPR_GRAMMAR = `
+Expr   = Term, {('+' | '-'), Term};
+Term   = Factor, {('*' | '/'), Factor};
+Factor = '(', Expr, ')' | Number;
+Number = Digit, {Digit};
+Digit  = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9';
+`
+
+## Using the parse tree
+
+A generated parser returns a **parse tree** — a typed object whose shape mirrors
+the grammar. This section covers how to consume that output and why wrapping it in
+a facade is usually the right move.
+
+### Parse tree shape
+
+Every node is a discriminated object with a `kind` field matching the rule name and
+one `item`_n_ field per item in that rule's body:
+
+```ts
+// Grammar rule:  Date = Year, '-', Month, '-', Day;
+export type DateNode = {
+  kind:  'Date'
+  item0: YearNode   // Year
+  item1: string     // '-'
+  item2: MonthNode  // Month
+  item3: string     // '-'
+  item4: DayNode    // Day
+}
+```
+
+| Grammar construct | Generated TypeScript type |
+|-------------------|---------------------------|
+| Terminal / char literal | `string` |
+| Non-terminal reference | `XxxNode` |
+| Alternation `A \| B` | `A \| B` (string alternatives deduplicated) |
+| Optional `[A]` | `A \| null` |
+| Repetition `{A}` | `A[]` |
+| Sequence `A, B, C` | Flattened into `item0`, `item1`, `item2` fields |
+
+### The facade pattern
+
+Parse trees are shaped like grammars, not domains. Callers typically want a clean
+domain object — not a `YearNode` containing four `DigitNode`s each wrapping a
+`string`.
+
+![Parse tree for the date example (4 levels deep) versus the flat CalendarDate domain object](/cst-vs-domain.svg)
+
+Wrapping the parser in a **facade module** solves this by:
+
+- keeping the generated class and its tree types private to the module
+- exporting only clean domain types that callers can depend on
+- translating `RDParserException` into a meaningful application-level error
+
+The generated parser can then be freely regenerated — rule renames, grammar
+refactors — without breaking any code outside the facade.
+
+![Facade module boundary: parseDate() accepts a string, calls the hidden GeneratedParser internally, and returns a CalendarDate or throws InvalidDateError](/pattern-facade.svg)
+
+### Worked example — ISO date strings
+
+**Grammar** (`date.ebnf`):
+
+```ebnf
+Date  = Year,  '-', Month, '-', Day;
+Year  = Digit, Digit, Digit, Digit;
+Month = Digit, Digit;
+Day   = Digit, Digit;
+Digit = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9';
+```
+
+**Generate the parser:**
+
+```bash
+rdp-gen date.ebnf --parser-name DateParser --output src/DateParser.ts
+```
+
+The generated file exports `DateParser`, all node types (`DateNode`, `YearNode`,
+`MonthNode`, `DayNode`, `DigitNode`), and the root `ParseTree` union.
+
+**Facade module** (`src/date.ts`):
+
+```ts
+import { DateParser, type DateNode, type DigitNode } from './DateParser.js'
+import { RDParserException } from '@configuredthings/rdp.js'
+
+// ── Domain types ──────────────────────────────────────────────────────────────
+
+export interface CalendarDate {
+  year:  number
+  month: number
+  day:   number
+}
+
+export class InvalidDateError extends Error {
+  constructor(input: string) {
+    super(`not a valid ISO date: "${input}"`)
+    this.name = 'InvalidDateError'
+  }
+}
+
+// ── Public API ────────────────────────────────────────────────────────────────
+
+export function parseDate(input: string): CalendarDate {
+  let tree: DateNode
+  try {
+    tree = DateParser.parse(input)
+  } catch (e) {
+    if (e instanceof RDParserException) throw new InvalidDateError(input)
+    throw e
+  }
+
+  const { item0: yr, item2: mo, item4: dy } = tree
+  return {
+    year:  digits(yr.item0, yr.item1, yr.item2, yr.item3),
+    month: digits(mo.item0, mo.item1),
+    day:   digits(dy.item0, dy.item1),
+  }
+}
+
+// ── Private helpers ───────────────────────────────────────────────────────────
+
+function digits(...nodes: DigitNode[]): number {
+  return parseInt(nodes.map((n) => n.item0).join(''), 10)
+}
+```
+
+**Usage:**
+
+```ts
+import { parseDate, CalendarDate, InvalidDateError } from './date.js'
+// DateParser and the raw tree types are not visible here
+
+const d: CalendarDate = parseDate('2024-03-15')
+// → { year: 2024, month: 3, day: 15 }
+
+parseDate('not-a-date')  // throws InvalidDateError
+```
+
+### Adding semantic validation
+
+The facade is also the right place for validation that the grammar cannot express —
+month range, day-in-month checks, and so on. Add it after the tree walk:
+
+```ts
+export function parseDate(input: string): CalendarDate {
+  // ... parse and convert as before ...
+
+  if (d.month < 1 || d.month > 12) throw new InvalidDateError(input)
+  if (d.day   < 1 || d.day   > 31) throw new InvalidDateError(input)
+  return d
+}
+```
+
+Keeping this in the facade means callers always receive either a valid
+`CalendarDate` or an `InvalidDateError` — they never see a partially-valid tree.
+
+### The evaluator pattern
+
+When the goal is to compute a single result from the input — not to construct a
+data object — an **evaluator** mirrors the grammar's recursive structure directly
+in code. Each production rule maps to one function; the functions call each other
+exactly as the grammar rules reference each other. There is no intermediate
+representation: parsing and evaluation happen in one pass over the tree.
+
+![Evaluator pattern: one function per grammar rule, calling each other recursively in the same shape as the grammar](/pattern-evaluator.svg)
+
+The recursive structure is easiest to see in a grammar diagram. For an arithmetic
+expression language:
+
+<RailroadDiagram rules={['Expr', 'Term', 'Factor']} grammar={EXPR_GRAMMAR} />
+
+`Factor` references `Expr` — the grammar is recursive — and the evaluator
+functions are recursive in exactly the same way.
+
+**Generate the parser:**
+
+```bash
+rdp-gen expr.ebnf --parser-name ExprParser --output src/ExprParser.ts
+```
+
+**Evaluator** (`src/expr.ts`):
+
+```ts
+import {
+  ExprParser,
+  type ExprNode, type TermNode, type FactorNode, type NumberNode,
+} from './ExprParser.js'
+import { RDParserException } from '@configuredthings/rdp.js'
+
+export class ExpressionError extends Error {}
+
+export function evaluate(input: string): number {
+  try {
+    return evalExpr(ExprParser.parse(input))
+  } catch (e) {
+    if (e instanceof RDParserException) throw new ExpressionError(`invalid expression: "${input}"`)
+    throw e
+  }
+}
+
+function evalExpr(node: ExprNode): number {
+  let result = evalTerm(node.item0)
+  for (const { item0: op, item1: term } of node.item1) {
+    result = op === '+' ? result + evalTerm(term) : result - evalTerm(term)
+  }
+  return result
+}
+
+function evalTerm(node: TermNode): number {
+  let result = evalFactor(node.item0)
+  for (const { item0: op, item1: factor } of node.item1) {
+    result = op === '*' ? result * evalFactor(factor) : result / evalFactor(factor)
+  }
+  return result
+}
+
+function evalFactor(node: FactorNode): number {
+  const inner = node.item0
+  // FactorNode.item0 is NumberNode (has `kind`) or a grouped expression (does not)
+  return 'kind' in inner ? evalNumber(inner) : evalExpr(inner.item1)
+}
+
+function evalNumber(node: NumberNode): number {
+  return parseInt([node.item0, ...node.item1].map((d) => d.item0).join(''), 10)
+}
+```
+
+**Usage:**
+
+```ts
+import { evaluate, ExpressionError } from './expr.js'
+
+evaluate('3 + 4 * 2')    // → 11
+evaluate('(3 + 4) * 2')  // → 14
+evaluate('??')            // throws ExpressionError
+```
+
+The evaluator is a better fit than the facade here because the result (`number`) is
+not a domain object — it is the computation itself. There is nothing to store; the
+tree is consumed and discarded in one traversal.
+
+---
+
+### The multi-stage pipeline
+
+The facade and evaluator patterns treat parsing, validation, and transformation as
+a single step. A **pipeline** separates them into distinct, composable stages with
+explicit types at each boundary:
+
+![Three-stage parse pipeline: parse produces a ParseTree, validate either returns it or an array of errors, transform produces the domain value](/pipeline.svg)
+
+This separation becomes valuable when:
+
+- validation needs to **accumulate errors** rather than stopping at the first
+  failure — each stage can collect all problems and return them together
+- the validation rules are complex enough to deserve their own tests, independent
+  of parsing and transformation
+- the transformation logic needs to trust that the tree is already semantically
+  valid (no defensive checks inside transform)
+
+**Stage types:**
+
+```ts
+import type { ConfigNode } from './ConfigParser.js'
+import { RDParserException } from '@configuredthings/rdp.js'
+
+export interface AppConfig { port: number; workers: number; timeout: number }
+export interface ConfigError { key: string; message: string }
+
+// Stage 1 — syntax: string → ParseTree (throws on malformed input)
+export function parse(input: string): ConfigNode {
+  try {
+    return ConfigParser.parse(input)
+  } catch (e) {
+    if (e instanceof RDParserException) throw new SyntaxError(e.message)
+    throw e
+  }
+}
+
+// Stage 2 — semantics: ParseTree → Result<ParseTree, ConfigError[]>
+export function validate(
+  tree: ConfigNode,
+): { ok: true; tree: ConfigNode } | { ok: false; errors: ConfigError[] } {
+  const errors: ConfigError[] = []
+  const seen = new Set<string>()
+  const allowed = new Set(['port', 'workers', 'timeout'])
+
+  for (const entry of tree.item0) {
+    const key = extractKey(entry)
+    if (!allowed.has(key))  errors.push({ key, message: `unknown key "${key}"` })
+    if (seen.has(key))      errors.push({ key, message: `duplicate key "${key}"` })
+    seen.add(key)
+  }
+
+  return errors.length > 0 ? { ok: false, errors } : { ok: true, tree }
+}
+
+// Stage 3 — transform: ParseTree → Domain (safe to call only after validate)
+export function transform(tree: ConfigNode): AppConfig {
+  const entries = Object.fromEntries(
+    tree.item0.map((entry) => [extractKey(entry), extractValue(entry)]),
+  )
+  return {
+    port:    entries['port']    ?? 3000,
+    workers: entries['workers'] ?? 1,
+    timeout: entries['timeout'] ?? 30,
+  }
+}
+```
+
+**Composing the pipeline:**
+
+```ts
+export function loadConfig(input: string): AppConfig {
+  const tree   = parse(input)
+  const result = validate(tree)
+  if (!result.ok) throw new AggregateError(result.errors, 'config validation failed')
+  return transform(result.tree)
+}
+```
+
+Because `validate` and `transform` are separate exported functions, they can each
+be tested in isolation — `validate` against known-invalid trees, `transform` against
+known-valid ones — without needing to construct grammar input for every case.
+
+---
+
+### When to skip the facade
+
+If the tree **is** your domain — you are building a linter, formatter, or language
+tool that needs to traverse or rewrite the grammar structure — use the generated
+node types directly. The facade pattern is for boundary points where you want to
+present a parser's output as a first-class domain value to code that should not
+know or care that a parser was involved.
