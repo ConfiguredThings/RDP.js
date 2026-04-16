@@ -6,11 +6,20 @@ import { RDParserException } from '@configuredthings/rdp.js'
 
 // ── Domain type ──────────────────────────────────────────────────────────────
 
+/**
+ * Domain representation of a successfully parsed input.
+ *
+ * Replace this empty interface with the fields that make sense for your domain.
+ * {@link parseArith} returns this type once {@link transform} is implemented.
+ */
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface Arith {
   // TODO: define your domain type
 }
 
+/**
+ * Thrown by {@link parseArith} when `input` does not match the grammar.
+ */
 export class ArithError extends Error {
   constructor(input: string) {
     super(`invalid input: "${input}"`)
@@ -20,6 +29,13 @@ export class ArithError extends Error {
 
 // ── Public API ───────────────────────────────────────────────────────────────
 
+/**
+ * Parse `input` and return a domain {@link Arith} object.
+ *
+ * @param input - Source string to parse.
+ * @returns A {@link Arith} representing the parsed input.
+ * @throws {@link ArithError} If `input` does not match the grammar.
+ */
 export function parseArith(input: string): Arith {
   let tree: ExprNode
   try {
@@ -33,6 +49,12 @@ export function parseArith(input: string): Arith {
 
 // ── Private ──────────────────────────────────────────────────────────────────
 
+/**
+ * Convert the raw parse tree into a {@link Arith} domain object.
+ *
+ * @param tree - The root {@link ExprNode} returned by the parser.
+ * @returns The domain object.
+ */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 function transform(tree: ExprNode): Arith {
   throw new Error('not implemented')

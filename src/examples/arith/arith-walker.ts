@@ -7,6 +7,12 @@ import { ArithParser, childNodes, type ArithTree } from './ArithParser.js'
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { visit, type Visitor } from '@configuredthings/rdp.js'
 
+/**
+ * Walk `root` depth-first (pre-order), calling `fn` on every node.
+ *
+ * @param root - The tree node to start from.
+ * @param fn - Called once per node visited, before its children.
+ */
 export function walk(root: ArithTree, fn: (node: ArithTree) => void): void {
   fn(root)
   for (const child of childNodes(root)) walk(child, fn)

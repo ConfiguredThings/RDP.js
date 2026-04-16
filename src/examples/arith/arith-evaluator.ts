@@ -13,6 +13,16 @@ import {
 } from './ArithParser.js'
 import { RDParserException } from '@configuredthings/rdp.js'
 
+/**
+ * Parse `input` and evaluate it to a result.
+ *
+ * Replace the `unknown` return type with your concrete result type once
+ * you have filled in the `eval*` functions below.
+ *
+ * @param input - Source string to parse and evaluate.
+ * @returns The evaluated result (narrowed once implemented).
+ * @throws {Error} If `input` does not match the grammar.
+ */
 export function evaluate(input: string): unknown {
   try {
     return evalExpr(ArithParser.parse(input))
@@ -22,6 +32,12 @@ export function evaluate(input: string): unknown {
   }
 }
 
+/**
+ * Evaluate a `Expr` node.
+ *
+ * @param node - The {@link ExprNode} to evaluate.
+ * @returns The evaluated result (replace `unknown` with your concrete type).
+ */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 function evalExpr(node: ExprNode): unknown {
   // node.wsp0: WspNode
@@ -31,6 +47,12 @@ function evalExpr(node: ExprNode): unknown {
   throw new Error('not implemented')
 }
 
+/**
+ * Evaluate a `Term` node.
+ *
+ * @param node - The {@link TermNode} to evaluate.
+ * @returns The evaluated result (replace `unknown` with your concrete type).
+ */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 function evalTerm(node: TermNode): unknown {
   // node.factor: FactorNode
@@ -38,12 +60,24 @@ function evalTerm(node: TermNode): unknown {
   throw new Error('not implemented')
 }
 
+/**
+ * Evaluate a `Factor` node.
+ *
+ * @param node - The {@link FactorNode} to evaluate.
+ * @returns The evaluated result (replace `unknown` with your concrete type).
+ */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 function evalFactor(node: FactorNode): unknown {
   // node.item0: { item0: string; expr: ExprNode; item2: string } | NumberNode
   throw new Error('not implemented')
 }
 
+/**
+ * Evaluate a `Number` node.
+ *
+ * @param node - The {@link NumberNode} to evaluate.
+ * @returns The evaluated result (replace `unknown` with your concrete type).
+ */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 function evalNumber(node: NumberNode): unknown {
   // node.digit: DigitNode
@@ -51,12 +85,24 @@ function evalNumber(node: NumberNode): unknown {
   throw new Error('not implemented')
 }
 
+/**
+ * Evaluate a `Digit` node.
+ *
+ * @param node - The {@link DigitNode} to evaluate.
+ * @returns The evaluated result (replace `unknown` with your concrete type).
+ */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 function evalDigit(node: DigitNode): unknown {
   // node.item0: string
   throw new Error('not implemented')
 }
 
+/**
+ * Evaluate a `wsp` node.
+ *
+ * @param node - The {@link WspNode} to evaluate.
+ * @returns The evaluated result (replace `unknown` with your concrete type).
+ */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 function evalWsp(node: WspNode): unknown {
   // node.item0: string[]

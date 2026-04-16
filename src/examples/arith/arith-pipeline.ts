@@ -6,17 +6,32 @@ import { RDParserException } from '@configuredthings/rdp.js'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
+/**
+ * Domain representation produced by the final pipeline stage.
+ *
+ * Replace this empty interface with the fields you want {@link transform} to return.
+ */
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface Arith {
   // TODO: define your domain type
 }
 
+/**
+ * A single semantic error found during {@link validate}.
+ */
 export interface ValidationError {
   message: string
 }
 
 // ── Stage 1: parse ───────────────────────────────────────────────────────────
 
+/**
+ * Stage 1 — parse `input` into a typed parse tree.
+ *
+ * @param input - Source string to parse.
+ * @returns The root {@link ExprNode} of the parse tree.
+ * @throws {SyntaxError} If `input` does not match the grammar.
+ */
 export function parse(input: string): ExprNode {
   try {
     return ArithParser.parse(input)
@@ -28,6 +43,12 @@ export function parse(input: string): ExprNode {
 
 // ── Stage 2: validate ────────────────────────────────────────────────────────
 
+/**
+ * Stage 2 — check the parse tree for semantic errors.
+ *
+ * @param tree - Parse tree returned by {@link parse}.
+ * @returns `{ ok: true, tree }` when valid, or `{ ok: false, errors }` otherwise.
+ */
 export function validate(
   tree: ExprNode,
 ): { ok: true; tree: ExprNode } | { ok: false; errors: ValidationError[] } {
@@ -38,6 +59,12 @@ export function validate(
 
 // ── Stage 3: transform ───────────────────────────────────────────────────────
 
+/**
+ * Stage 3 — convert the validated parse tree into a domain {@link Arith} object.
+ *
+ * @param tree - Validated parse tree from {@link validate}.
+ * @returns The domain object.
+ */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function transform(tree: ExprNode): Arith {
   throw new Error('not implemented')
