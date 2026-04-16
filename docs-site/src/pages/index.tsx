@@ -1,6 +1,7 @@
 import React from 'react'
 import { Link, withPrefix, type HeadFC } from 'gatsby'
 import Layout from '../components/Layout'
+import { GrammarDropZone } from '../components/GrammarDropZone'
 
 const QUICK_START = `\
 # scaffold a new parser project in seconds
@@ -72,6 +73,7 @@ export default function IndexPage() {
                 "Hi, I'm recursquirrel, your friendly recursively descending parsing squirrel"
               </em>
             </p>
+            <GrammarDropZone />
           </div>
         </div>
       </section>
