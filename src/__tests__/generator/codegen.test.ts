@@ -1,5 +1,53 @@
+import ts from 'typescript'
+import path from 'path'
+import { fileURLToPath } from 'url'
 import { generateParser } from '../../generator/codegen.js'
 import { RDParserException } from '../../exception.js'
+
+// ── TypeScript strict-typing helper ──────────────────────────────────────────
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../')
+const VIRTUAL_FILE = '__generated_virtual__.ts'
+
+/**
+ * Type-check a generated TypeScript source string using the TypeScript compiler
+ * API under the same strict settings the generated file header requires.
+ * Returns an array of human-readable diagnostic messages (empty = no errors).
+ */
+function typeCheck(source: string): string[] {
+  const compilerOptions: ts.CompilerOptions = {
+    target: ts.ScriptTarget.ES2022,
+    strict: true,
+    noUncheckedIndexedAccess: true,
+    moduleResolution: ts.ModuleResolutionKind.Bundler,
+    module: ts.ModuleKind.ES2022,
+    noEmit: true,
+    skipLibCheck: true, // only check our generated file, not the rdp.js library itself
+    paths: {
+      '@configuredthings/rdp.js': [path.join(ROOT, 'dist/esm/index.d.ts')],
+      '@configuredthings/rdp.js/observable': [path.join(ROOT, 'dist/esm/observable/index.d.ts')],
+    },
+  }
+
+  const defaultHost = ts.createCompilerHost(compilerOptions)
+  const host: ts.CompilerHost = {
+    ...defaultHost,
+    getSourceFile(fileName, langVer, onError) {
+      if (fileName === VIRTUAL_FILE) return ts.createSourceFile(fileName, source, langVer)
+      return defaultHost.getSourceFile(fileName, langVer, onError)
+    },
+    fileExists(fileName) {
+      return fileName === VIRTUAL_FILE || defaultHost.fileExists(fileName)
+    },
+    readFile(fileName) {
+      return fileName === VIRTUAL_FILE ? source : defaultHost.readFile(fileName)
+    },
+  }
+
+  const program = ts.createProgram([VIRTUAL_FILE], compilerOptions, host)
+  const diags = ts.getPreEmitDiagnostics(program, program.getSourceFile(VIRTUAL_FILE))
+  return [...diags].map((d) => ts.flattenDiagnosticMessageText(d.messageText, '\n'))
+}
 
 describe('generateParser', () => {
   it('returns a string containing the class declaration', () => {
@@ -228,5 +276,50 @@ describe('generateParser — grammar construct coverage', () => {
     const output = generateParser(`rule = 1*3("a" / foo)\nfoo = "b"`, { format: 'abnf' })
     expect(output).toContain('(string | FooNode)[]')
     expect(output).not.toContain('string | FooNode[]')
+  })
+})
+
+describe('generateParser — emitted code passes strict TypeScript type-checking', () => {
+  it('simple terminal rule compiles cleanly', () => {
+    const output = generateParser(`Rule = 'hello';`)
+    expect(typeCheck(output)).toEqual([])
+  })
+
+  it('sequence rule compiles cleanly', () => {
+    const output = generateParser(`Root = 'a', 'b', 'c';`)
+    expect(typeCheck(output)).toEqual([])
+  })
+
+  it('alternation with mixed node and string types compiles cleanly', () => {
+    // Exercises the (A | B)[] wrapping and definite-assignment assertions
+    const output = generateParser(`root = {'a' | item};\nitem = 'x';`)
+    expect(typeCheck(output)).toEqual([])
+  })
+
+  it('optional and zeroOrMore constructs compile cleanly', () => {
+    const output = generateParser(`root = ['opt'], {'rep'};`)
+    expect(typeCheck(output)).toEqual([])
+  })
+
+  it('non-terminal references compile cleanly', () => {
+    const output = generateParser(
+      `root = greeting, ' ', name;\ngreeting = 'hello';\nname = 'world';`,
+    )
+    expect(typeCheck(output)).toEqual([])
+  })
+
+  it('observable mode compiles cleanly', () => {
+    const output = generateParser(`root = 'a' | item;\nitem = 'b';`, { observable: true })
+    expect(typeCheck(output)).toEqual([])
+  })
+
+  it('ABNF grammar with core rules compiles cleanly', () => {
+    const output = generateParser(`word = 1*ALPHA\nalpha = ALPHA`, { format: 'abnf' })
+    expect(typeCheck(output)).toEqual([])
+  })
+
+  it('ABNF bounded repetition compiles cleanly', () => {
+    const output = generateParser(`rule = 2*4"a"`, { format: 'abnf' })
+    expect(typeCheck(output)).toEqual([])
   })
 })
