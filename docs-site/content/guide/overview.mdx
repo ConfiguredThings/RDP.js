@@ -33,7 +33,7 @@ A minimal, typed base class that handles buffer management and position tracking
 
 Key components:
 - **`RDParser`** — base class; subclass and implement each production rule as a method.
-- **`rdp-gen`** — CLI tool; reads a grammar file (ISO 14977 EBNF or RFC 5234 ABNF) and emits a fully typed TypeScript parser class.
+- **`rdp-gen`** — CLI tool; reads a grammar file (ISO 14977 EBNF or RFC 5234 ABNF) and emits a strictly-typed TypeScript parser class together with exported discriminated-union parse-tree types.
 - **`GrammarInterpreter`** — runtime interpreter; execute grammars without a code-generation step (for tooling and playgrounds).
 - **`ObservableRDParser`** — opt-in parse tracing via an attached `ParseObserver`.
 

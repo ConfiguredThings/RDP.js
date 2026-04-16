@@ -7,8 +7,11 @@ order: 6
 ## CLI Reference — `rdp-gen`
 
 `rdp-gen` is the code generator bundled with `@configuredthings/rdp.js`.
-It reads a grammar file (EBNF or ABNF) and emits a fully typed TypeScript
-parser class that extends `RDParser` or `ObservableRDParser`.
+It reads a grammar file (EBNF or ABNF) and emits a **strictly-typed** TypeScript
+parser class that extends `RDParser` or `ObservableRDParser`, together with
+exported discriminated-union types for every node in the parse tree.
+The generated output compiles cleanly under `strict: true` and
+`noUncheckedIndexedAccess: true` with no type errors.
 
 ### Installation
 
@@ -100,8 +103,9 @@ The scaffolded `tsconfig.json` includes:
 ```
 
 These options are **required** — the generated parser uses native `#` private
-fields (`target: ES2022`), strict null checks, and the package exports map
-(`moduleResolution: node16` or `bundler`).
+fields (`target: ES2022`), is verified to compile cleanly under strict null checks
+(`strict: true`, `noUncheckedIndexedAccess: true`), and needs the package exports
+map (`moduleResolution: node16` or `bundler`).
 
 ---
 
@@ -126,6 +130,53 @@ The constructor is `private`, so callers always go through `static parse`:
 ```ts
 const tree = MyParser.parse('some input')
 ```
+
+### Generated parse-tree types
+
+Alongside the parser class, `rdp-gen` emits a **discriminated-union type for every
+production rule** and a root `ParseTree` union that covers all of them.
+Given a grammar such as:
+
+```ebnf
+Expr   = Term, {('+' | '-'), Term};
+Term   = Factor, {'*', Factor};
+Factor = '(', Expr, ')' | Number;
+Number = Digit, {Digit};
+Digit  = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9';
+```
+
+`rdp-gen` emits types shaped like:
+
+```ts
+export type ExprNode = {
+  kind: 'Expr'
+  item0: TermNode
+  item1: { item0: string; item1: TermNode }[]
+}
+
+export type TermNode = {
+  kind: 'Term'
+  item0: FactorNode
+  item1: { item0: string; item1: FactorNode }[]
+}
+
+// … one type per rule …
+
+export type ParseTree =
+  | ExprNode
+  | TermNode
+  | FactorNode
+  | NumberNode
+  | DigitNode
+```
+
+The `kind` field is a string-literal type equal to the rule name, so the union is a
+**proper TypeScript discriminated union** — you can narrow on `kind` with a
+`switch` statement or `if` check and TypeScript will track the exact node shape
+in each branch.
+
+The generated code compiles without errors under `strict: true` and
+`noUncheckedIndexedAccess: true`; this is enforced by the `rdp-gen` test suite.
 
 With `--observable`, the static method gains an optional second parameter:
 
