@@ -1,8 +1,14 @@
 # RDP.js
 
+Write parsers, not boilerplate. Drop in a grammar, get a fully typed TypeScript parser — zero dependencies, dual ESM/CJS, batteries included.
+
+<div align="center">
+
 ![projectmascot](recursquirrel.svg)
 
-A minimal, typed base class for writing recursive descent parsers in TypeScript — plus an optional grammar interpreter and a code generator (`rdp-gen`) that produces strictly-typed TypeScript parser classes from EBNF or ABNF grammars.
+<sub>Hi, I'm recursquirrel, your friendly recursively descending parsing squirrel</sub>
+
+</div>
 
 ## Stability
 
