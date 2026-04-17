@@ -29,7 +29,7 @@
 export { generateParser } from './codegen.js'
 export type { GeneratorOptions } from './codegen.js'
 export { generateScaffold, generateInitScaffold } from './scaffold.js'
-export type { ScaffoldPattern, InitScaffoldOptions } from './scaffold.js'
+export type { ScaffoldPattern, ScaffoldInner, InitScaffoldOptions } from './scaffold.js'
 export type { GrammarAST, ProductionRule, RuleBody, CoreRuleName } from './ast.js'
 export { EBNFParser } from './ebnf-parser.js'
 export type { EBNFParseOptions } from './ebnf-parser.js'

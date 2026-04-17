@@ -64,19 +64,6 @@ export type GeneratorOptions = {
    * @default false
    */
   caseSensitiveStrings?: boolean
-
-  /**
-   * When `true`, emit a `childNodes(node: ParseTree): ParseTree[]` helper alongside
-   * the parser and types. Use this when building tree walkers, linters, formatters,
-   * or any tool that needs to traverse the full parse tree structure.
-   *
-   * Pair with the `Visitor<T>` type and `visit()` function from
-   * `@configuredthings/rdp.js` to dispatch per-node logic without writing
-   * explicit `switch` statements.
-   *
-   * @default false
-   */
-  walker?: boolean
 }
 
 /**
@@ -210,10 +197,8 @@ export function generateParser(source: string, options: GeneratorOptions = {}): 
   // Append parse tree types
   lines.push(generateTypes(ast, { treeName }))
 
-  // Optionally append the childNodes walker helper
-  if (options.walker) {
-    lines.push(generateWalker(ast, { treeName }))
-  }
+  // Always append the childNodes walker helper
+  lines.push(generateWalker(ast, { treeName }))
 
   return lines.join('\n')
 }

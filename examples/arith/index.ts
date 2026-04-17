@@ -6,7 +6,8 @@
  * @packageDocumentation
  *
  * Complete worked example: an arithmetic expression grammar compiled to a
- * generated parser, four scaffold files, and the grammar AST.
+ * generated parser, scaffold files for each composable pattern, and the
+ * grammar AST.
  *
  * **Grammar** (`src/grammars/arith.ebnf`):
  * ```ebnf
@@ -22,8 +23,8 @@
  * |------|------|
  * | {@link ArithParser} | Generated parser (with `childNodes` walker) |
  * | {@link "arith-evaluator"} | Evaluator scaffold — one function per rule |
- * | {@link "arith-facade"} | Facade scaffold — clean domain API |
- * | {@link "arith-pipeline"} | Pipeline scaffold — parse / validate / transform |
+ * | {@link "arith-facade"} | Facade + evaluator scaffold — clean domain API |
+ * | {@link "arith-pipeline"} | Pipeline + evaluator scaffold — parse / validate / transform |
  * | {@link "arith-walker"} | Walker scaffold — tree traversal with `visit()` |
  * | {@link arithAST} | Parsed grammar AST |
  */
@@ -43,13 +44,12 @@ export type {
 // ── Evaluator scaffold ────────────────────────────────────────────────────────
 export { evaluate } from './arith-evaluator.js'
 
-// ── Facade scaffold ───────────────────────────────────────────────────────────
-export { parseArith, ArithError } from './arith-facade.js'
-export type { Arith as ArithFacade } from './arith-facade.js'
+// ── Facade scaffold (facade + evaluator) ─────────────────────────────────────
+export { parseArith, ArithError, ArithResult } from './arith-facade.js'
 
-// ── Pipeline scaffold ─────────────────────────────────────────────────────────
-export { parse, validate, transform } from './arith-pipeline.js'
-export type { Arith as ArithPipeline, ValidationError } from './arith-pipeline.js'
+// ── Pipeline scaffold (pipeline + evaluator) ─────────────────────────────────
+export { parse, validate, transform, loadArith } from './arith-pipeline.js'
+export type { ArithResult as ArithPipelineResult, ValidationError } from './arith-pipeline.js'
 
 // ── Walker scaffold ───────────────────────────────────────────────────────────
 export { walk } from './arith-walker.js'

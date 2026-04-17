@@ -22,7 +22,7 @@ top to bottom direction
 () " string " as input
 () " number " as output
 
-package "evaluator  (mirrors grammar rules)" #eef3fa {
+package "interpreter  (mirrors grammar rules)" #eef3fa {
   component "evaluate()" <<key>> as evaluate
   component "evalExpr()" as evalExpr
   component "evalTerm()" as evalTerm

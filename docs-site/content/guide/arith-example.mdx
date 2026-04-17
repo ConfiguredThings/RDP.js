@@ -13,7 +13,7 @@ This page walks through the full lifecycle of a grammar — from `.ebnf` source
 file to generated parser to four scaffold patterns — using a simple arithmetic
 expression grammar as the running example.
 
-All files live in [`src/examples/arith/`](https://github.com/ConfiguredThings/RDP.js/tree/main/src/examples/arith/)
+All files live in [`examples/arith/`](https://github.com/ConfiguredThings/RDP.js/tree/main/examples/arith/)
 and are documented in the [ArithExample API module](/api/modules/ArithExample.html).
 Regenerate them any time the grammar changes with:
 
@@ -43,12 +43,11 @@ The railroad diagrams for the three top-level rules:
 rdp-gen src/grammars/arith.ebnf \
   --parser-name ArithParser \
   --tree-name ArithTree \
-  --walker \
-  --output src/examples/arith/ArithParser.ts
+  --output examples/arith/ArithParser.ts
 ```
 
-`--walker` adds a `childNodes(node: ArithTree): ArithTree[]` helper alongside the
-parser and types. This is needed by the walker scaffold in Step 5.
+`childNodes(node: ArithTree): ArithTree[]` is always emitted alongside the parser
+and types — no extra flag is needed.
 
 The generated [`ArithParser`](/api/classes/ArithExample.ArithParser.html) has a
 `static parse(input: string): ExprNode` entry point and one private method per
@@ -77,20 +76,20 @@ Run the scaffolds once, then edit the output freely — they are **not** regener
 
 | Scaffold | Command | Best for |
 |----------|---------|----------|
-| `evaluator` | `--scaffold evaluator` | Recursive evaluation / interpretation |
-| `facade` | `--scaffold facade` | Hiding the parser behind a clean domain API |
-| `pipeline` | `--scaffold pipeline` | Multi-stage parse → validate → transform |
-| `walker` | `--scaffold walker` | Tree traversal with per-node visitor dispatch |
+| `interpreter` | `--scaffold interpreter` | Recursive evaluation / interpretation |
+| `facade` | `--scaffold facade --inner interpreter` | Hiding the parser behind a clean domain API |
+| `pipeline` | `--scaffold pipeline --inner interpreter` | Multi-stage parse → validate → transform |
+| `tree-walker` | `--scaffold tree-walker` | Tree traversal with per-node visitor dispatch |
 
 ---
 
-### Scaffold: evaluator
+### Scaffold: interpreter
 
 ```bash
 rdp-gen src/grammars/arith.ebnf \
   --parser-name ArithParser \
-  --scaffold evaluator \
-  --output src/examples/arith/arith-evaluator.ts
+  --scaffold interpreter \
+  --output examples/arith/arith-evaluator.ts
 ```
 
 Emits one `eval{Rule}()` function per grammar rule, an `evaluate()` entry point,
@@ -134,6 +133,8 @@ function evalTerm(node: TermNode): unknown {
 
 Full file: [`arith-evaluator.ts`](/api/functions/ArithExample.evaluate.html)
 
+
+
 ---
 
 ### Scaffold: facade
@@ -142,21 +143,33 @@ Full file: [`arith-evaluator.ts`](/api/functions/ArithExample.evaluate.html)
 rdp-gen src/grammars/arith.ebnf \
   --parser-name ArithParser \
   --scaffold facade \
-  --output src/examples/arith/arith-facade.ts
+  --inner interpreter \
+  --output examples/arith/arith-facade.ts
 ```
 
-Emits a domain `interface`, a typed error class, a public `parse{Base}()` entry
-point, and a private `transform()` stub. The parser is completely hidden — callers
-only see `parseArith()` and `ArithError`.
+Emits a domain `ArithResult` class with a `static from(tree)` factory, a typed
+`ArithError`, a public `parseArith()` entry point, and private `eval{Rule}()`
+functions. The parser is completely hidden — callers only see `parseArith()` and
+`ArithResult`.
 
 ```ts
 // arith-facade.ts — edit freely; not regenerated
 
-import { ArithParser, type ExprNode } from './ArithParser.js'
+import {
+  ArithParser,
+  type ExprNode,
+  type TermNode,
+  // … one type per rule …
+} from './ArithParser.js'
 import { RDParserException } from '@configuredthings/rdp.js'
 
-export interface Arith {
-  // TODO: define your domain type
+export class ArithResult {
+  // TODO: define constructor fields
+  constructor() {}
+
+  static from(tree: ExprNode): ArithResult {
+    throw new Error('not implemented')
+  }
 }
 
 export class ArithError extends Error {
@@ -166,20 +179,24 @@ export class ArithError extends Error {
   }
 }
 
-export function parseArith(input: string): Arith {
-  let tree: ExprNode
+export function parseArith(input: string): ArithResult {
   try {
-    tree = ArithParser.parse(input)
+    return ArithResult.from(ArithParser.parse(input))
   } catch (e) {
     if (e instanceof RDParserException) throw new ArithError(input)
     throw e
   }
-  return transform(tree)
 }
 
-function transform(tree: ExprNode): Arith {
+function evalExpr(node: ExprNode): unknown {
   throw new Error('not implemented')
 }
+
+function evalTerm(node: TermNode): unknown {
+  throw new Error('not implemented')
+}
+
+// … one function per rule …
 ```
 
 Full file: [`arith-facade.ts`](/api/functions/ArithExample.parseArith.html)
@@ -192,13 +209,14 @@ Full file: [`arith-facade.ts`](/api/functions/ArithExample.parseArith.html)
 rdp-gen src/grammars/arith.ebnf \
   --parser-name ArithParser \
   --scaffold pipeline \
-  --output src/examples/arith/arith-pipeline.ts
+  --inner interpreter \
+  --output examples/arith/arith-pipeline.ts
 ```
 
-Emits three stage functions — `parse()` (throws `SyntaxError`), `validate()`
+Emits three exported stage functions — `parse()` (throws on syntax error), `validate()`
 (returns a `{ ok: true; tree } | { ok: false; errors }` result type), and
-`transform()` (stub). Use this when validation logic is substantial or needs
-to be testable independently of parsing.
+`transform()` (stub) — plus a `loadArith()` combinator that chains them.
+Use this when validation logic is substantial or needs to be testable independently.
 
 ```ts
 // arith-pipeline.ts — edit freely; not regenerated
@@ -209,26 +227,27 @@ export function validate(
   tree: ExprNode,
 ): { ok: true; tree: ExprNode } | { ok: false; errors: ValidationError[] } { … }
 
-export function transform(tree: ExprNode): Arith { … }
+export function transform(tree: ExprNode): ArithResult { … }
+
+export function loadArith(input: string): ArithResult { … }
 ```
 
 Full file: [`arith-pipeline.ts`](/api/functions/ArithExample.parse.html)
 
 ---
 
-### Scaffold: walker
+### Scaffold: tree-walker
 
 ```bash
 rdp-gen src/grammars/arith.ebnf \
   --parser-name ArithParser \
   --tree-name ArithTree \
-  --scaffold walker \
-  --output src/examples/arith/arith-walker.ts
+  --scaffold tree-walker \
+  --output examples/arith/arith-walker.ts
 ```
 
-Requires `--walker` on the parser generation step (Step 1) so that `childNodes`
-is available. Emits a `walk(root, fn)` utility and a commented `Visitor` stub
-covering every rule in the grammar:
+Emits a `walk(root, fn)` utility using `childNodes` (always present) and a
+commented `Visitor` stub covering every rule in the grammar:
 
 ```ts
 // arith-walker.ts — edit freely; not regenerated
