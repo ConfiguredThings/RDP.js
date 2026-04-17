@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `--scaffold` now accepts a composable `--inner <strategy>` option that specifies the traversal strategy embedded inside `facade` and `pipeline` wrappers. Eight combinations are now available: two standalone (`interpreter`, `tree-walker`) and six composable (`facade --inner interpreter`, `facade --inner tree-walker`, `facade --inner pipeline:interpreter`, `facade --inner pipeline:tree-walker`, `pipeline --inner interpreter`, `pipeline --inner tree-walker`). `facade` and `pipeline` require `--inner`; `interpreter` and `tree-walker` forbid it.
+- `ScaffoldInner` type (`'interpreter' | 'tree-walker' | 'pipeline:interpreter' | 'pipeline:tree-walker'`) exported from `@configuredthings/rdp.js/generator` for use with the programmatic `generateScaffold` API.
+
+### Changed
+
+- `childNodes` helper is now **always emitted** alongside the generated parser; the `--walker` flag has been removed. There is no longer any reason to pass a separate flag to get tree-walking support.
+- `--scaffold evaluator` renamed to `--scaffold interpreter` to align with standard language-implementation terminology.
+- `--scaffold walker` renamed to `--scaffold tree-walker`; `--inner walker` renamed to `--inner tree-walker`; `--inner pipeline:walker` renamed to `--inner pipeline:tree-walker`.
+
+### Removed
+
+- `--walker` flag removed from `rdp-gen <grammar>` documentation and generated output. `childNodes` is unconditionally emitted; `--walker` is silently accepted and ignored for backwards compatibility.
+
 ## [0.3.0] - 2026-04-16
 
 ### Added

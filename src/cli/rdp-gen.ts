@@ -10,11 +10,17 @@ import { parseArgs } from 'node:util'
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { generateParser, generateScaffold, generateInitScaffold } from '../generator/index.js'
-import type { ScaffoldPattern } from '../generator/index.js'
+import type { ScaffoldPattern, ScaffoldInner } from '../generator/index.js'
 import { EBNFParser } from '../generator/ebnf-parser.js'
 import { ABNFParser } from '../generator/abnf-parser.js'
 
-const SCAFFOLD_PATTERNS: ScaffoldPattern[] = ['evaluator', 'facade', 'pipeline', 'walker']
+const SCAFFOLD_PATTERNS: ScaffoldPattern[] = ['interpreter', 'facade', 'pipeline', 'tree-walker']
+const SCAFFOLD_INNER_VALUES: ScaffoldInner[] = [
+  'interpreter',
+  'tree-walker',
+  'pipeline:interpreter',
+  'pipeline:tree-walker',
+]
 
 const require = createRequire(import.meta.url)
 const { version } = require('../../../package.json') as { version: string }
@@ -50,6 +56,7 @@ function runGenerate(rawArgs: string[]): void {
       observable: { type: 'boolean' },
       walker: { type: 'boolean' },
       scaffold: { type: 'string' },
+      inner: { type: 'string' },
       'ast-only': { type: 'boolean' },
       'abnf-case-sensitive-strings': { type: 'boolean' },
     },
@@ -79,7 +86,6 @@ function runGenerate(rawArgs: string[]): void {
     parserName: values['parser-name'] ?? 'GeneratedParser',
     treeName: values['tree-name'] ?? 'ParseTree',
     ...(values['observable'] !== undefined && { observable: values['observable'] }),
-    ...(values['walker'] !== undefined && { walker: values['walker'] }),
     ...(values['abnf-case-sensitive-strings'] !== undefined && {
       caseSensitiveStrings: values['abnf-case-sensitive-strings'],
     }),
@@ -97,7 +103,42 @@ function runGenerate(rawArgs: string[]): void {
       )
       process.exit(1)
     }
-    output = generateScaffold(source, pattern as ScaffoldPattern, generatorOptions)
+
+    const innerRaw = values['inner']
+    if (innerRaw !== undefined && !SCAFFOLD_INNER_VALUES.includes(innerRaw as ScaffoldInner)) {
+      console.error(
+        `rdp-gen: unknown --inner value "${innerRaw}". Valid values: ${SCAFFOLD_INNER_VALUES.join(', ')}`,
+      )
+      process.exit(1)
+    }
+
+    // Validate combinations — generateScaffold also checks, but give a cleaner CLI error.
+    if ((pattern === 'facade' || pattern === 'pipeline') && !innerRaw) {
+      const validInner =
+        pattern === 'facade'
+          ? 'interpreter, tree-walker, pipeline:interpreter, or pipeline:tree-walker'
+          : 'interpreter or tree-walker'
+      console.error(`rdp-gen: --scaffold ${pattern} requires --inner. Pass --inner ${validInner}.`)
+      process.exit(1)
+    }
+    if ((pattern === 'interpreter' || pattern === 'tree-walker') && innerRaw) {
+      console.error(`rdp-gen: --inner is not applicable to --scaffold ${pattern}.`)
+      process.exit(1)
+    }
+    if (
+      pattern === 'pipeline' &&
+      (innerRaw === 'pipeline:interpreter' || innerRaw === 'pipeline:tree-walker')
+    ) {
+      console.error(
+        `rdp-gen: --scaffold pipeline does not support --inner pipeline:*. Use --inner interpreter or --inner tree-walker.`,
+      )
+      process.exit(1)
+    }
+
+    output = generateScaffold(source, pattern as ScaffoldPattern, {
+      ...generatorOptions,
+      ...(innerRaw !== undefined && { inner: innerRaw as ScaffoldInner }),
+    })
   } else {
     output = generateParser(source, generatorOptions)
   }
@@ -199,12 +240,16 @@ Options:
   --parser-name <name>               class name for the generated parser (default: GeneratedParser)
   --tree-name <name>                 type name for the generated parse tree (default: ParseTree)
   --observable                       extend ObservableRDParser; adds notifyEnter/notifyExit calls
-  --walker                           include childNodes() in the generated parser file
   --scaffold <pattern>               emit a one-time usage scaffold instead of the parser
-                                     evaluator  one typed function per rule, ready to fill in
-                                     facade     error class, entry point, transform stub
-                                     pipeline   parse / validate / transform stage stubs
-                                     walker     walk() utility using childNodes (requires --walker)
+                                     interpreter  one typed function per rule, ready to fill in
+                                     facade       module-as-facade with domain class and error type (requires --inner)
+                                     pipeline     parse / validate / transform stages (requires --inner)
+                                     tree-walker  walk() utility using childNodes with visitor stubs
+  --inner <strategy>                 inner traversal strategy for facade and pipeline scaffolds
+                                     interpreter          recursive eval functions
+                                     tree-walker          childNodes-based tree walker with visitor stubs
+                                     pipeline:interpreter pipeline class with eval inside #transform (facade only)
+                                     pipeline:tree-walker pipeline class with tree-walker inside #transform (facade only)
   --ast-only                         emit grammar AST as JSON instead of TypeScript
   --abnf-case-sensitive-strings      match ABNF string literals case-sensitively
   -v, --version                      print version number
