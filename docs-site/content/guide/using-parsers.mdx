@@ -16,30 +16,32 @@ Digit  = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9';
 ## Using the parse tree
 
 A generated parser returns a **parse tree** — a typed object whose shape mirrors
-the grammar. This section covers how to consume that output and the four patterns
-for doing so, so you can pick the right one before writing any code.
+the grammar. This section covers the patterns for consuming that output.
 
-### Choosing a pattern
+The patterns fall into three categories that compose with each other:
 
-| Pattern | Best for | Pros | Cons |
-|---------|----------|------|------|
-| [**Facade**](#the-facade-pattern) | Exposing a parser as a clean domain API | Hides generated types; callers never see the grammar; generated file can be freely regenerated | One function per grammar — not ideal when you need multiple independent transformations |
-| [**Evaluator**](#the-evaluator-pattern) | Computing a single value from the input (e.g. arithmetic, template rendering) | No intermediate representation; direct recursion mirrors grammar structure | Cannot reuse the same parse for different computations; grammar changes ripple through all functions |
-| [**Pipeline**](#the-multi-stage-pipeline) | Input that needs multi-error validation before transformation | Explicit stage boundaries; each stage is independently testable; validation errors accumulate | More boilerplate for simple cases; overkill when validation is trivial |
-| [**Tree walker**](#tree-walking) | Language tools — linters, formatters, compilers, analysis passes | Works directly on the generated node types; multiple passes over the same tree; `childNodes` handles traversal mechanics | Exposes generated types to calling code; grammar changes may require walker updates |
+- **Traversal strategies** — how you walk the tree: [Interpreter](#interpreting), [Tree walking](#tree-walking)
+- **Stage separation** — how you structure the process around a traversal: [Pipeline](#the-pipeline-pattern)
+- **Module boundary** — how you consistently expose the result to callers regardless of grammar changes: [Facade](#the-facade-pattern)
 
-If you need multiple independent operations over the same input, prefer the tree walker — parse once, walk many times.
-If callers should be isolated from grammar details, use the facade.
-If the result is a single computed value with no reuse, use the evaluator.
-If validation must collect all errors before rejecting, use the pipeline.
+The three categories compose: you pick a traversal strategy based on what the
+computation needs, optionally wrap the stages in a pipeline to separate parsing,
+validation, and transformation with explicit typed boundaries, and optionally wrap
+the whole thing in a facade if callers should be isolated from the generated parser
+types.
 
-Once you have chosen a pattern, `rdp-gen --scaffold <pattern>` emits a typed
-starter file wired up to your grammar — imports, entry points, stubs, and error
-handling already in place. See [CLI Reference — `--scaffold`](/docs/cli/#--scaffold--generate-a-usage-scaffold),
-or the [arithmetic worked example](/docs/arith-example/) for all four scaffold
-patterns applied to a complete grammar.
+![Pattern overview: string flows through GeneratedParser to a ParseTree; you choose a traversal strategy (Interpreter or Tree walker) at the core; Pipeline optionally wraps the strategy to add parse/validate/transform stages; Facade optionally wraps everything to provide a stable API boundary](/pattern-overview.svg)
 
-![Pattern overview: string input flows through GeneratedParser to a ParseTree; four component patterns consume it - Facade wraps and hides types, Evaluator computes a value directly, Pipeline validates then transforms, Walker traverses with childNodes and visit()](/pattern-overview.svg)
+### Choosing a traversal strategy
+
+| Strategy | Best for | Notes |
+|----------|----------|-------|
+| [**Interpreter**](#interpreting) | Computing a single value from the input (e.g. arithmetic, template rendering) | No intermediate representation; direct recursion mirrors grammar structure; grammar changes ripple through all functions |
+| [**Tree walking**](#tree-walking) | Language tools — linters, formatters, translators, compilers, analysis passes | Parse once, walk many times; multiple independent passes over the same tree; `childNodes` handles traversal mechanics |
+
+Use the **interpreter** when the result is a single computed value and the parse is
+not reused. Use **tree walking** for everything else — it is the right default for
+any non-trivial transformation or translation task.
 
 ### Parse tree shape
 
@@ -68,140 +70,44 @@ export type DateNode = {
 | Repetition `{A}` | `A[]` |
 | Sequence `A, B, C` | Flattened: non-terminals named, terminals use `item`_n_ |
 
-### The facade pattern
+### CST and AST
 
-Parse trees are shaped like grammars, not **domains**. A domain object is a type
-that makes sense in your application — `CalendarDate { year, month, day }` — as
-opposed to a grammar artefact — `DateNode → YearNode → DigitNode → string`.
-Callers typically want the former; the parse tree gives them the latter.
+The parse tree `rdp-gen` produces is a *Concrete Syntax Tree* (CST) — it mirrors
+the grammar exactly, including every punctuation terminal, grouping rule, and
+intermediate non-terminal. For simple grammars this is manageable to work with
+directly, as the examples in this document do.
 
-![Parse tree for the date example (4 levels deep) versus the flat CalendarDate domain object](/cst-vs-domain.svg)
+For more complex language tools it is common practice to first *lower* the CST into
+an *Abstract Syntax Tree* (AST) — a simplified structure that keeps only the
+semantically meaningful nodes and discards syntactic noise. For example, the
+arithmetic CST has five levels (`Expr → Term → Factor → Number → Digit`); an AST
+for the same input might collapse that to a simple tree of `Add`, `Mul`, and
+`Number` nodes that is much easier to analyse or emit from.
 
-Wrapping the parser in a **facade module** solves this by:
+Lowering is just the visitor pattern applied to produce a new tree rather than a
+value: write a visitor that walks the CST and builds your AST node by node, then
+apply your other passes to the AST instead. For the simple examples in this document
+the CST is manageable enough that a separate AST is not necessary.
 
-- keeping the generated class and its tree types private to the module
-- exporting only clean domain types that callers can depend on
-- translating `RDParserException` into a meaningful application-level error
+![Three representations of the same date input: the deep CST that mirrors the grammar, a simplified AST, and the flat CalendarDate domain object that callers want](/cst-vs-domain.svg)
 
-The generated parser can then be freely regenerated — rule renames, grammar
-refactors — without breaking any code outside the facade.
+### Interpreting
 
-![Facade module boundary: parseDate() accepts a string, calls the hidden GeneratedParser internally, and returns a CalendarDate or throws InvalidDateError](/pattern-facade.svg)
+When the goal is to compute a single
+result from the input — not to construct a data object — an **interpreter** mirrors
+the grammar's recursive structure directly in code. Each production rule maps to one
+function; the functions call each other exactly as the grammar rules reference each
+other. There is no intermediate representation: parsing and evaluation happen in one
+pass over the tree.
 
-### Worked example — ISO date strings
-
-**Grammar** (`date.ebnf`):
-
-```ebnf
-Date  = Year,  '-', Month, '-', Day;
-Year  = Digit, Digit, Digit, Digit;
-Month = Digit, Digit;
-Day   = Digit, Digit;
-Digit = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9';
-```
-
-**Generate the parser:**
-
-```bash
-rdp-gen date.ebnf --parser-name DateParser --output src/DateParser.ts
-```
-
-The generated file exports `DateParser`, all node types (`DateNode`, `YearNode`,
-`MonthNode`, `DayNode`, `DigitNode`), and the root `ParseTree` union.
-
-**Facade module** (`src/date.ts`):
-
-```ts
-import { DateParser, type DateNode, type DigitNode } from './DateParser.js'
-import { RDParserException } from '@configuredthings/rdp.js'
-
-// ── Domain types ──────────────────────────────────────────────────────────────
-
-export interface CalendarDate {
-  year:  number
-  month: number
-  day:   number
-}
-
-export class InvalidDateError extends Error {
-  constructor(input: string) {
-    super(`not a valid ISO date: "${input}"`)
-    this.name = 'InvalidDateError'
-  }
-}
-
-// ── Public API ────────────────────────────────────────────────────────────────
-
-export function parseDate(input: string): CalendarDate {
-  let tree: DateNode
-  try {
-    tree = DateParser.parse(input)
-  } catch (e) {
-    if (e instanceof RDParserException) throw new InvalidDateError(input)
-    throw e
-  }
-
-  const { year, month, day } = tree
-  return {
-    year:  digits(year.digit0, year.digit1, year.digit2, year.digit3),
-    month: digits(month.digit0, month.digit1),
-    day:   digits(day.digit0, day.digit1),
-  }
-}
-
-// ── Private helpers ───────────────────────────────────────────────────────────
-
-function digits(...nodes: DigitNode[]): number {
-  return parseInt(nodes.map((n) => n.item0).join(''), 10)
-}
-```
-
-**Usage:**
-
-```ts
-import { parseDate, CalendarDate, InvalidDateError } from './date.js'
-// DateParser and the raw tree types are not visible here
-
-const d: CalendarDate = parseDate('2024-03-15')
-// → { year: 2024, month: 3, day: 15 }
-
-parseDate('not-a-date')  // throws InvalidDateError
-```
-
-### Adding semantic validation
-
-The facade is also the right place for validation that the grammar cannot express —
-month range, day-in-month checks, and so on. Add it after the tree walk:
-
-```ts
-export function parseDate(input: string): CalendarDate {
-  // ... parse and convert as before ...
-
-  if (d.month < 1 || d.month > 12) throw new InvalidDateError(input)
-  if (d.day   < 1 || d.day   > 31) throw new InvalidDateError(input)
-  return d
-}
-```
-
-Keeping this in the facade means callers always receive either a valid
-`CalendarDate` or an `InvalidDateError` — they never see a partially-valid tree.
-
-### The evaluator pattern
-
-When the goal is to compute a single result from the input — not to construct a
-data object — an **evaluator** mirrors the grammar's recursive structure directly
-in code. Each production rule maps to one function; the functions call each other
-exactly as the grammar rules reference each other. There is no intermediate
-representation: parsing and evaluation happen in one pass over the tree.
-
-![Evaluator pattern: one function per grammar rule, calling each other recursively in the same shape as the grammar](/pattern-evaluator.svg)
+![Interpreter pattern: one function per grammar rule, calling each other recursively in the same shape as the grammar](/pattern-evaluator.svg)
 
 The recursive structure is easiest to see in a grammar diagram. For an arithmetic
 expression language:
 
 <RailroadDiagram rules={['Expr', 'Term', 'Factor']} grammar={EXPR_GRAMMAR} />
 
-`Factor` references `Expr` — the grammar is recursive — and the evaluator
+`Factor` references `Expr` — the grammar is recursive — and the interpreter
 functions are recursive in exactly the same way.
 
 **Generate the parser:**
@@ -267,36 +173,166 @@ evaluate('(3 + 4) * 2')  // → 14
 evaluate('??')            // throws ExpressionError
 ```
 
-The evaluator is a better fit than the facade here because the result (`number`) is
-not a domain object — it is the computation itself. There is nothing to store; the
-tree is consumed and discarded in one traversal.
+A separate facade module is not needed here — the interpreter's unexported functions
+already keep the parser and tree types private, and the result (`number`) is the
+computation itself rather than a domain object to expose.
 
-The evaluator is also the pattern that most directly mirrors how the generated
+The interpreter is also the pattern that most directly mirrors how the generated
 parser itself works. Both have one function per grammar rule, with each function
 calling the others in exactly the shape the grammar describes:
 
 ```
-Parser:    #parse_expr() → #parse_term() → #parse_factor() → #parse_expr()
-Evaluator:  evalExpr()   →  evalTerm()   →  evalFactor()   →  evalExpr()
+Parser:      #parse_expr() → #parse_term() → #parse_factor() → #parse_expr()
+Interpreter:  evalExpr()   →  evalTerm()   →  evalFactor()   →  evalExpr()
 ```
 
 The call graphs are isomorphic. The only difference is what each function
 traverses — the parser consumes a **character stream** (building structure), the
-evaluator consumes the **tree the parser produced** (collapsing that structure back
-to a value). The grammar defines both processes simultaneously; the evaluator just
+interpreter consumes the **tree the parser produced** (collapsing that structure back
+to a value). The grammar defines both processes simultaneously; the interpreter just
 makes the second one explicit.
 
 ---
 
-### The multi-stage pipeline
+### Tree walking
 
-The facade and evaluator patterns treat parsing, validation, and transformation as
-a single step. A **pipeline** separates them into distinct, composable stages with
-explicit types at each boundary:
+When you are building a language tool — a
+linter, formatter, translator, compiler, or analysis pass — the tree itself is the
+domain. You need to traverse every node, and you may want several independent passes
+over the same tree. For complex tools, consider [lowering the CST to an AST](#cst-and-ast)
+before applying your visitor passes.
+
+There are two pieces. The `Visitor<T>` type and `visit()` function come from the
+`@configuredthings/rdp.js` runtime and work with any generated grammar. The
+`childNodes()` function is grammar-specific and is always emitted alongside the generated parser.
+
+```bash
+rdp-gen expr.ebnf --parser-name ExprParser --output src/ExprParser.ts
+```
+
+#### `Visitor<ParseTree, T>` and `visit()`
+
+`Visitor<ParseTree, T>` is a mapped type that derives one optional handler per
+`kind` value from your `ParseTree` union. You only declare handlers for the node
+types you care about; unhandled nodes return `undefined`.
+
+![visit() dispatch: caller passes node (kind='Number') and visitor to visit(); visit looks up visitor['Number']; if a handler is registered it is called with the node and the result returned; if no handler is registered, undefined is returned](/walker-visit-dispatch.svg)
+
+```ts
+import { visit, type Visitor } from '@configuredthings/rdp.js'
+import type { ParseTree } from './ExprParser.js'
+
+// Handle exactly the node types you need — all others return undefined
+const linter: Visitor<ParseTree, string | undefined> = {
+  Number: (n) => n.digit.item0 === '0' ? 'leading zero' : undefined,
+}
+
+const warning = visit(node, linter)  // string | undefined
+```
+
+When you want TypeScript to enforce that every node kind is handled — so that a new
+grammar rule produces a compile error rather than silently returning `undefined` —
+use `Required<Visitor<ParseTree, T>>`:
+
+```ts
+// TypeScript error here if any case is missing
+const printer: Required<Visitor<ParseTree, string>> = {
+  Expr:   (n) => `expr`,
+  Term:   (n) => `term`,
+  Factor: (n) => `factor`,
+  Number: (n) => `number`,
+  Digit:  (n) => n.item0,
+}
+```
+
+#### `childNodes()`
+
+`childNodes(node)` returns the direct `ParseTree` children of any node — every
+named rule node reachable from its fields, with arrays and anonymous sequence
+objects unwrapped. Terminal strings are not included.
+
+![childNodes unwrapping: ExprNode has a term field and an item1 array of anonymous sequence objects; childNodes returns a flat ParseTree[] containing the TermNode from term and the TermNode from each sequence object, discarding the operator strings](/walker-childnodes.svg)
+
+```ts
+import { childNodes } from './ExprParser.js'
+import type { ParseTree } from './ExprParser.js'
+
+childNodes(exprNode)    // → [termNode, termNode, ...]
+childNodes(digitNode)   // → []  (leaf — no ParseTree children)
+```
+
+With `childNodes` in hand, a full recursive walk is just a few lines:
+
+```ts
+function walk(node: ParseTree, fn: (n: ParseTree) => void): void {
+  fn(node)
+  for (const child of childNodes(node)) walk(child, fn)
+}
+```
+
+#### Worked example — collect all number literals
+
+```ts
+import { ExprParser, childNodes } from './ExprParser.js'
+import { visit, type Visitor } from '@configuredthings/rdp.js'
+import type { ParseTree, NumberNode } from './ExprParser.js'
+
+export function collectNumbers(input: string): NumberNode[] {
+  const tree = ExprParser.parse(input)
+  const numbers: NumberNode[] = []
+
+  const collector: Visitor<ParseTree, void> = {
+    Number: (n) => { numbers.push(n) },
+  }
+
+  function walk(node: ParseTree): void {
+    visit(node, collector)
+    for (const child of childNodes(node)) walk(child)
+  }
+  walk(tree)
+
+  return numbers
+}
+
+collectNumbers('3 + 4 * 2')  // → [NumberNode('3'), NumberNode('4'), NumberNode('2')]
+```
+
+Because `walk` and `collector` are separate, you can compose multiple visitors
+over a single traversal or run independent passes on the same tree:
+
+```ts
+function walk(node: ParseTree): void {
+  visit(node, linter)       // first pass
+  visit(node, collector)    // second pass — same traversal
+  for (const child of childNodes(node)) walk(child)
+}
+```
+
+#### Max depth — a traversal without `visit()`
+
+For traversals that don't need per-kind dispatch, `childNodes` alone is enough:
+
+```ts
+function maxDepth(node: ParseTree): number {
+  const kids = childNodes(node)
+  return kids.length === 0 ? 1 : 1 + Math.max(...kids.map(maxDepth))
+}
+```
+
+---
+
+### The pipeline pattern
+
+The interpreter treats parsing and computation as a single pass. In a traditional
+multi-pass compiler the work is split across discrete stages — parsing, semantic
+analysis, transformation, emission — each receiving the output of the previous one.
+The **pipeline** pattern brings the same idea to a single grammar: it separates the
+work into distinct stages with explicit types at each boundary:
 
 ![Three-stage parse pipeline: parse produces a ParseTree, validate either returns it or an array of errors, transform produces the domain value](/pipeline.svg)
 
-This separation becomes valuable when:
+This mirrors the parse → semantic analysis → transformation stages of a multi-pass
+compiler, and becomes valuable when:
 
 - validation needs to **accumulate errors** rather than stopping at the first
   failure — each stage can collect all problems and return them together
@@ -308,7 +344,7 @@ This separation becomes valuable when:
 **Stage types:**
 
 ```ts
-import type { ConfigNode } from './ConfigParser.js'
+import type { ConfigNode, EntryNode } from './ConfigParser.js'
 import { RDParserException } from '@configuredthings/rdp.js'
 
 export interface AppConfig { port: number; workers: number; timeout: number }
@@ -370,132 +406,190 @@ Because `validate` and `transform` are separate exported functions, they can eac
 be tested in isolation — `validate` against known-invalid trees, `transform` against
 known-valid ones — without needing to construct grammar input for every case.
 
----
+```ts
+// Grammar-specific helpers — shape depends on the Entry rule in config.ebnf:
+//   Entry = Ident, '=', Number;
+//   Ident = letter, {letter};   Number = digit, {digit};
+function extractKey(entry: EntryNode): string {
+  return [entry.ident.letter, ...entry.ident.item1].map((c) => c.item0).join('')
+}
+function extractValue(entry: EntryNode): number {
+  return parseInt([entry.number.digit, ...entry.number.item1].map((d) => d.item0).join(''), 10)
+}
+```
 
 ---
 
-### Tree walking
+### The facade pattern
 
-When you are building a language tool — a linter, formatter, compiler, or analysis
-pass — the tree itself is the domain. You need to traverse every node, and you may
-want several independent passes over the same tree. The tree-walking pattern
-addresses this directly.
+The facade is a **module boundary**, not a traversal strategy. It wraps whichever
+traversal strategy you have chosen — interpreter, pipeline, or tree-walker — and hides the
+generated parser types behind a clean domain API. It is overkill for internal or
+single-use code; for anything with external callers it pays for itself immediately.
 
-There are two pieces. The `Visitor<T>` type and `visit()` function come from the
-`@configuredthings/rdp.js` runtime and work with any generated grammar. The
-`childNodes()` function is grammar-specific and is emitted when you pass [`--walker`](/docs/cli/#generated-parse-tree-types)
-to `rdp-gen`.
+The problem it solves: parse trees are shaped like grammars, not **domains**. A
+domain object is a type that makes sense in your application —
+`CalendarDate { year, month, day }` — as opposed to a grammar artefact —
+`DateNode → YearNode → DigitNode → string`. Callers typically want the former;
+the parse tree gives them the latter.
+
+![The deep CST the parser produces, an optional simplified AST, and the flat CalendarDate domain object that callers want — the facade hides all of it](/cst-vs-domain.svg)
+
+Wrapping the parser in a **facade module** solves this by:
+
+- keeping the generated class and its tree types private to the module
+- exporting only clean domain types that callers can depend on
+- translating `RDParserException` into a meaningful application-level error
+
+The generated parser can then be freely regenerated — rule renames, grammar
+refactors — without breaking any code outside the facade.
+
+![Facade module boundary: parseDate() accepts a string, calls the hidden GeneratedParser internally, and returns a CalendarDate or throws InvalidDateError](/pattern-facade.svg)
+
+### Adding semantic validation
+
+Grammars express structure, not meaning. Syntax answers "is this well-formed?";
+semantics answers "is this valid?". Checks like month and day ranges cannot be
+expressed in EBNF — they need to be enforced in code, after the tree walk:
+
+```ts
+export function parseDate(input: string): CalendarDate {
+  // ... parse and convert as before ...
+
+  if (d.month < 1 || d.month > 12) throw new InvalidDateError(input)
+  if (d.day   < 1 || d.day   > 31) throw new InvalidDateError(input)
+  return d
+}
+```
+
+Callers always receive either a valid `CalendarDate` or an `InvalidDateError` —
+they never see a partially-valid tree. For more complex validation — accumulating
+multiple errors, or keeping validation and transformation independently testable —
+see [the pipeline pattern](#the-pipeline-pattern).
+
+### Worked example — ISO date strings
+
+This example shows the [facade](#the-facade-pattern) and
+[pipeline](#the-pipeline-pattern) patterns working together. The pipeline gives
+the semantic checks a clean home — the `validate` stage — keeping them separate
+from the structural conversion in `transform`. The facade wraps everything behind
+a single `parseDate` function so callers never see the generated types.
+
+**Grammar** (`date.ebnf`):
+
+```ebnf
+Date  = Year,  '-', Month, '-', Day;
+Year  = Digit, Digit, Digit, Digit;
+Month = Digit, Digit;
+Day   = Digit, Digit;
+Digit = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9';
+```
+
+**Generate the parser:**
 
 ```bash
-rdp-gen expr.ebnf --parser-name ExprParser --walker --output src/ExprParser.ts
+rdp-gen date.ebnf --parser-name DateParser --output src/DateParser.ts
 ```
 
-#### `Visitor<T>` and `visit()`
-
-`Visitor<ParseTree, T>` is a mapped type that derives one optional handler per
-`kind` value from your `ParseTree` union. You only declare handlers for the node
-types you care about; unhandled nodes return `undefined`.
-
-![visit() dispatch: caller passes node (kind='Number') and visitor to visit(); visit looks up visitor['Number']; if a handler is registered it is called with the node and the result returned; if no handler is registered, undefined is returned](/walker-visit-dispatch.svg)
+**Facade module** (`src/date.ts`):
 
 ```ts
-import { visit, type Visitor } from '@configuredthings/rdp.js'
-import type { ParseTree } from './ExprParser.js'
+import { DateParser, type DateNode, type DigitNode } from './DateParser.js'
+import { RDParserException } from '@configuredthings/rdp.js'
 
-// Handle exactly the node types you need — all others return undefined
-const linter: Visitor<ParseTree, string | undefined> = {
-  Number: (n) => n.digit.item0 === '0' ? 'leading zero' : undefined,
-}
+// ── Domain types ──────────────────────────────────────────────────────────────
 
-const warning = visit(node, linter)  // string | undefined
-```
+export class CalendarDate {
+  constructor(
+    readonly year:  number,
+    readonly month: number,
+    readonly day:   number,
+  ) {}
 
-When you want TypeScript to enforce that every node kind is handled — so that a new
-grammar rule produces a compile error rather than silently returning `undefined` —
-use `Required<Visitor<ParseTree, T>>`:
-
-```ts
-// TypeScript error here if any case is missing
-const printer: Required<Visitor<ParseTree, string>> = {
-  Expr:   (n) => `expr`,
-  Term:   (n) => `term`,
-  Factor: (n) => `factor`,
-  Number: (n) => `number`,
-  Digit:  (n) => n.item0,
-}
-```
-
-#### `childNodes()`
-
-`childNodes(node)` returns the direct `ParseTree` children of any node — every
-named rule node reachable from its fields, with arrays and anonymous sequence
-objects unwrapped. Terminal strings are not included.
-
-![childNodes unwrapping: ExprNode has a term field and an item1 array of anonymous sequence objects; childNodes returns a flat ParseTree[] containing the TermNode from term and the TermNode from each sequence object, discarding the operator strings](/walker-childnodes.svg)
-
-```ts
-import { childNodes } from './ExprParser.js'
-import type { ParseTree } from './ExprParser.js'
-
-// ExprParser.ts was generated with --walker
-childNodes(exprNode)    // → [termNode, termNode, ...]
-childNodes(digitNode)   // → []  (leaf — no ParseTree children)
-```
-
-With `childNodes` in hand, a full recursive walk is just a few lines:
-
-```ts
-function walk(node: ParseTree, fn: (n: ParseTree) => void): void {
-  fn(node)
-  for (const child of childNodes(node)) walk(child, fn)
-}
-```
-
-#### Worked example — collect all number literals
-
-```ts
-import { ExprParser, childNodes } from './ExprParser.js'
-import { visit, type Visitor } from '@configuredthings/rdp.js'
-import type { ParseTree, NumberNode } from './ExprParser.js'
-
-export function collectNumbers(input: string): NumberNode[] {
-  const tree = ExprParser.parse(input)
-  const numbers: NumberNode[] = []
-
-  const collector: Visitor<ParseTree> = {
-    Number: (n) => { numbers.push(n) },
+  static from(tree: DateNode): CalendarDate {
+    const { year, month, day } = tree
+    return new CalendarDate(
+      CalendarDate.#digits(year.digit0, year.digit1, year.digit2, year.digit3),
+      CalendarDate.#digits(month.digit0, month.digit1),
+      CalendarDate.#digits(day.digit0,   day.digit1),
+    )
   }
 
-  function walk(node: ParseTree): void {
-    visit(node, collector)
-    for (const child of childNodes(node)) walk(child)
+  static #digits(...nodes: DigitNode[]): number {
+    return parseInt(nodes.map((n) => n.item0).join(''), 10)
   }
-  walk(tree)
-
-  return numbers
 }
 
-collectNumbers('3 + 4 * 2')  // → [NumberNode('3'), NumberNode('4'), NumberNode('2')]
+export class InvalidDateError extends Error {
+  constructor(input: string) {
+    super(`not a valid ISO date: "${input}"`)
+    this.name = 'InvalidDateError'
+  }
+}
+
+// ── Public API ───────────────────────────────────────────────────────────────
+
+export function parseDate(input: string): CalendarDate {
+  return DatePipeline.run(input)
+}
+
+// ── Implementation ────────────────────────────────────────────────────────────
+
+class DatePipeline {
+  static run(input: string): CalendarDate {
+    const tree   = DatePipeline.#parse(input)     // Stage 1 — syntax
+    const result = DatePipeline.#validate(tree)   // Stage 2 — semantics
+    if (!result.ok) throw new InvalidDateError(input)
+    return DatePipeline.#transform(result.tree)   // Stage 3 — transform
+  }
+
+  static #parse(input: string): DateNode {
+    try {
+      return DateParser.parse(input)
+    } catch (e) {
+      if (e instanceof RDParserException) throw new InvalidDateError(input)
+      throw e
+    }
+  }
+
+  static #validate(tree: DateNode): { ok: true; tree: DateNode } | { ok: false } {
+    const d = CalendarDate.from(tree)
+    if (d.month < 1 || d.month > 12) return { ok: false }
+    if (d.day   < 1 || d.day   > 31) return { ok: false }
+    return { ok: true, tree }
+  }
+
+  static #transform(tree: DateNode): CalendarDate {
+    return CalendarDate.from(tree)
+  }
+}
 ```
 
-Because `walk` and `collector` are separate, you can compose multiple visitors
-over a single traversal or run independent passes on the same tree:
+**Usage:**
 
 ```ts
-function walk(node: ParseTree): void {
-  visit(node, linter)       // first pass
-  visit(node, collector)    // second pass — same traversal
-  for (const child of childNodes(node)) walk(child)
-}
+import { parseDate, CalendarDate, InvalidDateError } from './date.js'
+// DateParser and the raw tree types are not visible here
+
+const d: CalendarDate = parseDate('2024-03-15')
+// → { year: 2024, month: 3, day: 15 }
+
+parseDate('2024-13-01')  // throws InvalidDateError (month out of range)
+parseDate('not-a-date')  // throws InvalidDateError (syntax error)
 ```
 
-#### Max depth — a traversal without `visit()`
+---
 
-For traversals that don't need per-kind dispatch, `childNodes` alone is enough:
+### Scaffolding
 
-```ts
-function maxDepth(node: ParseTree): number {
-  const kids = childNodes(node)
-  return kids.length === 0 ? 1 : 1 + Math.max(...kids.map(maxDepth))
-}
-```
+`rdp-gen --scaffold <pattern>` emits a typed starter file for any of the four
+patterns, wired up to your grammar — imports, entry points, stubs, and error handling
+already in place. The CLI flag names match the pattern names: `interpreter` for
+[interpreting](#interpreting) and `tree-walker` for [tree walking](#tree-walking).
+
+Because the patterns compose, you can run multiple scaffolds for the same grammar:
+for example, `--scaffold facade` for the public module and `--scaffold tree-walker` for
+the implementation it wraps. See
+[CLI Reference — `--scaffold`](/docs/cli/#--scaffold--generate-a-usage-scaffold),
+or the [arithmetic worked example](/docs/arith-example/) for all four patterns
+applied to a complete grammar.

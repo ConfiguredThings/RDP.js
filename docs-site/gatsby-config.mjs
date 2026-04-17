@@ -1,5 +1,6 @@
 import rehypeShiki from '@shikijs/rehype';
 import remarkGfm from 'remark-gfm';
+import remarkValidateLinks from 'remark-validate-links';
 import rehypeSlug from 'rehype-slug';
 import rehypeAutolinkHeadings from 'rehype-autolink-headings';
 
@@ -20,7 +21,7 @@ const config = {
       options: {
         extensions: ['.mdx', '.md'],
         mdxOptions: {
-          remarkPlugins: [remarkGfm],
+          remarkPlugins: [remarkGfm, remarkValidateLinks],
           rehypePlugins: [
             rehypeSlug,
             [

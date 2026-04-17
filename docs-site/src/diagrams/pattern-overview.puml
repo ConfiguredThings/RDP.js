@@ -22,18 +22,15 @@ interface "ParseTree" as tree
 input -down-> parser : encode + parse
 parser -down-> tree : typed node tree
 
-component "Facade" as facade
-component "Evaluator" as evaluator
-component "Pipeline" as pipeline
-component "Walker" as walker
+package "Facade  (optional — stable API boundary)" as facadePkg #EEF3FA {
+  package "Pipeline  (optional — parse / validate / transform)" as pipelinePkg {
+    component "Interpreter" as interp
+    component "Tree walker" as treewalker
+    interp -[hidden]r-> treewalker
+  }
+}
 
-facade -[hidden]r-> evaluator
-evaluator -[hidden]r-> pipeline
-pipeline -[hidden]r-> walker
-
-tree --> facade       : DomainType
-tree --> evaluator    : number / string
-tree --> pipeline     : Domain (validated)
-tree --> walker       : T[] / analysis
+tree -down-> interp      : choose one
+tree -[hidden]-> treewalker
 
 @enduml

@@ -46,8 +46,8 @@ rdp-gen <grammar> [options]
 | `--parser-name <name>` | `GeneratedParser` | Class name for the generated parser |
 | `--tree-name <name>` | `ParseTree` | Type name for the generated parse tree |
 | `--observable` | off | Extend [`ObservableRDParser`](/docs/debugging/); adds `notifyEnter`/`notifyExit` calls |
-| `--walker` | off | Emit a `childNodes()` helper alongside the parser |
 | `--scaffold <pattern>` | — | Emit a one-time usage scaffold instead of the parser (see below) |
+| `--inner <strategy>` | — | Inner traversal strategy for `facade` and `pipeline` scaffolds (see below) |
 | `--ast-only` | off | Emit the grammar AST as JSON (used by the playground) |
 | `--abnf-case-sensitive-strings` | off | Match ABNF quoted string literals case-sensitively |
 
@@ -71,84 +71,100 @@ Parse an ABNF grammar and write to stdout:
 rdp-gen protocol.abnf --format abnf --parser-name FrameParser
 ```
 
-Generate with tree-walking support (emits `childNodes()` alongside the parser):
-
-```bash
-rdp-gen grammar.ebnf --parser-name MyParser --walker --output src/MyParser.ts
-```
-
 ---
 
 ### `--scaffold` — generate a usage scaffold
 
 ```bash
-rdp-gen <grammar> --parser-name MyParser --scaffold <pattern> --output src/MyEvaluator.ts
+rdp-gen <grammar> --parser-name MyParser --scaffold <pattern> [--inner <strategy>] --output src/my.ts
 ```
 
 `--scaffold` emits a **one-time starter file** for a chosen usage pattern rather
 than the parser itself. Unlike the generated parser, scaffold output is **not
 regenerated** — it is a starting point that you edit freely. See also the
 [`generateScaffold`](/api/functions/Generator.generateScaffold.html) programmatic API
-and the [arithmetic worked example](/docs/arith-example/) for all four patterns
+and the [arithmetic worked example](/docs/arith-example/) for all patterns
 applied to a real grammar.
 
-| Pattern | What it emits |
-|---------|--------------|
-| `evaluator` | One typed `eval{Rule}()` function per grammar rule with `RDParserException` wrapping |
-| `facade` | Domain interface, error class, entry-point function, and a `transform()` stub |
-| `pipeline` | `parse()`, `validate()`, and `transform()` stage functions with a `Result` type |
-| `walker` | A `walk()` utility using `childNodes`, plus a commented visitor stub for every rule |
+The `facade` and `pipeline` patterns are structural wrappers and require `--inner`
+to specify the traversal strategy they wrap. The `interpreter` and `tree-walker` patterns
+are standalone and do not accept `--inner`.
 
-The typical workflow for a new grammar is:
+| `--scaffold` | `--inner` | What it emits |
+|---|---|---|
+| `interpreter` | — | One typed `eval{Rule}()` function per rule, `evaluate()` entry, `RDParserException` wrapping |
+| `tree-walker` | — | `walk()` utility using `childNodes`, commented `Visitor` stub for every rule |
+| `facade` | `interpreter` | Module-as-facade: `parse{Base}()`, `{Base}Result` class with `from()`, private eval functions |
+| `facade` | `tree-walker` | Module-as-facade: `parse{Base}()`, `{Base}Result` class, private walk utility and visitor stubs |
+| `facade` | `pipeline:interpreter` | Module-as-facade: `parse{Base}()`, private `{Base}Pipeline` class, eval inside `#transform` |
+| `facade` | `pipeline:tree-walker` | As above but `#transform` uses a tree walker |
+| `pipeline` | `interpreter` | Exported `parse`/`validate`/`transform` + `load{Base}()` combinator; eval inside `transform` |
+| `pipeline` | `tree-walker` | As above but `transform` uses a tree walker |
+
+The typical workflow for a new grammar:
 
 ```bash
 # 1. Generate the parser (regenerate freely as the grammar evolves)
 rdp-gen date.ebnf --parser-name DateParser --output src/DateParser.ts
 
 # 2. Generate the scaffold once (edit this file; do not regenerate)
-rdp-gen date.ebnf --parser-name DateParser --scaffold facade --output src/date.ts
+rdp-gen date.ebnf --parser-name DateParser --scaffold facade --inner interpreter --output src/date.ts
 ```
 
 The scaffold imports the parser by a relative path (`'./DateParser.js'`), so keep
 both files in the same directory.
 
-#### `evaluator` scaffold
+#### `interpreter` scaffold
 
 Emits one `eval{Rule}(node: {Rule}Node): unknown` function per rule, an `evaluate()`
 entry point that calls the first rule, and wraps `RDParserException` in a plain `Error`:
 
 ```bash
-rdp-gen date.ebnf --parser-name DateParser --scaffold evaluator --output src/date-eval.ts
+rdp-gen date.ebnf --parser-name DateParser --scaffold interpreter --output src/date-eval.ts
+```
+
+#### `tree-walker` scaffold
+
+Emits a `walk(root, fn)` utility using `childNodes` (always present in the generated
+parser), plus a commented-out `Visitor` stub covering every rule in the grammar:
+
+```bash
+rdp-gen date.ebnf --parser-name DateParser --scaffold tree-walker --output src/date-walker.ts
 ```
 
 #### `facade` scaffold
 
-Emits a domain `interface`, an error class (`{Base}Error extends Error`), a public
-`parse{Base}()` entry point, and a private `transform()` stub:
+Emits a module-as-facade: a public `parse{Base}()` entry point, a `{Base}Result` domain
+class with a `static from(tree)` factory, and a `{Base}Error` class. Requires `--inner`
+to specify the traversal strategy used inside the facade:
 
 ```bash
-rdp-gen date.ebnf --parser-name DateParser --scaffold facade --output src/date.ts
+# Facade wrapping recursive interpreter functions
+rdp-gen date.ebnf --parser-name DateParser --scaffold facade --inner interpreter --output src/date.ts
+
+# Facade wrapping a tree walker
+rdp-gen date.ebnf --parser-name DateParser --scaffold facade --inner tree-walker --output src/date.ts
+
+# Facade wrapping a full pipeline (interpreter inside #transform)
+rdp-gen date.ebnf --parser-name DateParser --scaffold facade --inner pipeline:interpreter --output src/date.ts
+
+# Facade wrapping a full pipeline (tree walker inside #transform)
+rdp-gen date.ebnf --parser-name DateParser --scaffold facade --inner pipeline:tree-walker --output src/date.ts
 ```
 
 #### `pipeline` scaffold
 
-Emits three stage functions — `parse()` (throws `SyntaxError`), `validate()` (returns
-a `{ ok: true; tree } | { ok: false; errors }` result), and `transform()` (stub) —
-plus the shared `ValidationError` interface:
+Emits three exported stage functions — `parse()` (throws `SyntaxError`), `validate()`
+(returns `{ ok: true; tree } | { ok: false; errors }`), and `transform()` (stub) — plus
+a `load{Base}()` combinator that chains them. Requires `--inner` to specify the
+traversal strategy used inside `transform`:
 
 ```bash
-rdp-gen date.ebnf --parser-name DateParser --scaffold pipeline --output src/date-pipeline.ts
-```
+# Pipeline with recursive interpreter inside transform
+rdp-gen date.ebnf --parser-name DateParser --scaffold pipeline --inner interpreter --output src/date-pipeline.ts
 
-#### `walker` scaffold
-
-Emits a `walk(root, fn)` utility using `childNodes`, plus a commented-out
-`Visitor` stub covering every rule in the grammar. Generate the parser with
-`--walker` so `childNodes` is available:
-
-```bash
-rdp-gen date.ebnf --parser-name DateParser --walker --output src/DateParser.ts
-rdp-gen date.ebnf --parser-name DateParser --scaffold walker --output src/date-walker.ts
+# Pipeline with tree walker inside transform
+rdp-gen date.ebnf --parser-name DateParser --scaffold pipeline --inner tree-walker --output src/date-pipeline.ts
 ```
 
 See [Using the Parse Tree](/docs/parse-tree/) for worked examples of each pattern.
@@ -280,7 +296,7 @@ The `kind` field is a string-literal type equal to the rule name, so the union i
 `switch` statement or `if` check and TypeScript will track the exact node shape
 in each branch.
 
-With `--walker`, `rdp-gen` also emits a `childNodes` helper:
+`rdp-gen` always emits a `childNodes` helper alongside the parser:
 
 ```ts
 export function childNodes(node: ParseTree): ParseTree[]
