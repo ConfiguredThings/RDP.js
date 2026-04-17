@@ -7,12 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.4.1] - 2026-04-17
-
-### Fixed
-
-- `codegen.test.ts` — removed stale `walker: true` from `GeneratorOptions` test calls; `walker` was removed from `GeneratorOptions` in 0.4.0 and its presence caused a TypeScript error in CI (`Object literal may only specify known properties`)
-
 ## [0.4.0] - 2026-04-17
 
 ### Added
@@ -87,8 +81,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bootstrapping meta-grammars: EBNF and ABNF formats each described in both EBNF and ABNF (`src/grammars/`)
 - Left-recursion detection at grammar compilation time
 
-[unreleased]: https://github.com/ConfiguredThings/RDP.js/compare/v0.4.1...HEAD
-[0.4.1]: https://github.com/ConfiguredThings/RDP.js/compare/v0.4.0...v0.4.1
+[unreleased]: https://github.com/ConfiguredThings/RDP.js/compare/v0.4.0...HEAD
 [0.4.0]: https://github.com/ConfiguredThings/RDP.js/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/ConfiguredThings/RDP.js/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/ConfiguredThings/RDP.js/compare/v0.1.0...v0.2.0
