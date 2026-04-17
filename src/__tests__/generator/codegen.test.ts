@@ -324,10 +324,10 @@ describe('generateParser — emitted code passes strict TypeScript type-checking
     expect(typeCheck(output)).toEqual([])
   })
 
-  it('walker: true emits childNodes and the output compiles cleanly', () => {
+  it('childNodes is always emitted and the output compiles cleanly', () => {
     const output = generateParser(
       `Expr = Term, {('+' | '-'), Term};\nTerm = Factor, {('*' | '/'), Factor};\nFactor = '(', Expr, ')' | Number;\nNumber = Digit, {Digit};\nDigit = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9';`,
-      { parserName: 'ExprParser', walker: true },
+      { parserName: 'ExprParser' },
     )
     expect(output).toContain('function childNodes')
     expect(typeCheck(output)).toEqual([])
@@ -348,7 +348,7 @@ describe('generated parser — runtime correctness', () => {
   let ExprParser!: { parse(s: string): unknown }
 
   beforeAll(async () => {
-    const source = generateParser(EXPR_GRAMMAR, { parserName: 'ExprParser', walker: true })
+    const source = generateParser(EXPR_GRAMMAR, { parserName: 'ExprParser' })
     const { ExprParser: Ep } = await compileAndImport(source)
     ExprParser = Ep as { parse(s: string): unknown }
   })
@@ -398,7 +398,7 @@ describe('generated walker — runtime correctness', () => {
   let childNodes!: (n: unknown) => { kind: string }[]
 
   beforeAll(async () => {
-    const source = generateParser(EXPR_GRAMMAR, { parserName: 'ExprParser', walker: true })
+    const source = generateParser(EXPR_GRAMMAR, { parserName: 'ExprParser' })
     const { ExprParser: Ep, childNodes: cn } = await compileAndImport(source)
     ExprParser = Ep as { parse(s: string): { kind: string } }
     childNodes = cn as (n: unknown) => { kind: string }[]
