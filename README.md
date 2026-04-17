@@ -4,6 +4,11 @@
 
 A minimal, typed base class for writing recursive descent parsers in TypeScript — plus an optional grammar interpreter and a code generator (`rdp-gen`) that produces strictly-typed TypeScript parser classes from EBNF or ABNF grammars.
 
+## Stability
+
+> [!WARNING]
+> **This library is pre-1.0.** Minor versions may introduce breaking changes to the public API, CLI flags, and generated output. Pin to an exact version in production.
+
 ## What is `@configuredthings/rdp.js`?
 
 A minimal, typed base class that handles buffer management and position tracking so subclasses can focus purely on grammar rules. TypeScript, dual ESM/CJS, zero runtime dependencies.
