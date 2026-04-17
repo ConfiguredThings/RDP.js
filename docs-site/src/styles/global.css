@@ -35,7 +35,7 @@
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
   --max-width:     860px;
   --sidebar-width: 240px;
-  --toc-width:     220px;
+  --toc-width:     var(--sidebar-width);
   --header-h:       56px;
 }
 
@@ -85,7 +85,7 @@ a:hover { color: var(--color-link-hover); text-decoration: underline; }
 }
 
 .site-header-inner {
-  max-width: calc(var(--max-width) + var(--sidebar-width) + var(--toc-width) + 7rem);
+  max-width: calc(var(--max-width) + var(--sidebar-width) + var(--toc-width) + 4rem);
   margin: 0 auto;
   display: flex;
   align-items: center;
@@ -139,7 +139,7 @@ a:hover { color: var(--color-link-hover); text-decoration: underline; }
 /* ── Page layout ──────────────────────────────────────────────────────────── */
 .page-layout {
   display: flex;
-  max-width: calc(var(--max-width) + var(--sidebar-width) + var(--toc-width) + 7rem);
+  max-width: calc(var(--max-width) + var(--sidebar-width) + var(--toc-width) + 4rem);
   margin: 0 auto;
   padding: 0 1.5rem;
   min-height: calc(100vh - var(--header-h));
@@ -214,7 +214,7 @@ a:hover { color: var(--color-link-hover); text-decoration: underline; }
 .doc-main {
   flex: 1;
   min-width: 0;
-  padding: 2.5rem 0 4rem 2.5rem;
+  padding: 2.5rem 2.5rem 4rem 2.5rem;
   max-width: var(--max-width);
 }
 
@@ -225,8 +225,8 @@ a:hover { color: var(--color-link-hover); text-decoration: underline; }
   top: var(--header-h);
   z-index: 10;
   /* Extend to left/right edges of doc-main by cancelling its padding */
-  margin: -2.5rem -1rem 0 -2.5rem;
-  padding: 0 1rem 0 2.5rem;
+  margin: -2.5rem -2.5rem 0 -2.5rem;
+  padding: 0 2.5rem 0 2.5rem;
   height: 2.25rem;
   display: flex;
   align-items: center;
@@ -314,7 +314,24 @@ a:hover { color: var(--color-link-hover); text-decoration: underline; }
 .toc-level-3 a { padding-left: 1rem; }
 .toc-level-3 a.active { padding-left: calc(1rem - 2px); }
 
+/* ── Unstable banner ──────────────────────────────────────────────────────── */
+.unstable-banner {
+  background: #fff8e1;
+  border: 1px solid #f9a825;
+  border-radius: 4px;
+  padding: 0.5rem 0.85rem;
+  margin-bottom: 1.5rem;
+  font-size: 0.85rem;
+  color: #5f4200;
+  line-height: 1.5;
+}
+
 /* ── Prose ────────────────────────────────────────────────────────────────── */
+.doc-content h1,
+.doc-content h2,
+.doc-content h3,
+.doc-content h4 { scroll-margin-top: calc(var(--header-h) + 2.5rem); }
+
 .doc-content h1 { font-family: var(--font-heading); font-size: 1.75rem; margin-bottom: 1.25rem; line-height: 1.3; }
 .doc-content h2 { font-family: var(--font-heading); font-size: 1.35rem; margin: 2rem 0 0.75rem; border-bottom: 1px solid var(--color-border); padding-bottom: 0.3rem; }
 .doc-content h3 { font-family: var(--font-heading); font-size: 1.1rem;  margin: 1.75rem 0 0.5rem; }
@@ -325,7 +342,7 @@ a:hover { color: var(--color-link-hover); text-decoration: underline; }
 .doc-content ol { margin: 0.75rem 0; padding-left: 1.5rem; }
 .doc-content li { margin: 0.3rem 0; }
 
-.doc-content img { max-width: 100%; height: auto; }
+.doc-content img { max-width: 100%; height: auto; display: block; margin: 0 auto; }
 
 .doc-content strong { font-weight: 600; }
 .doc-content em     { font-style: italic; }
@@ -1248,18 +1265,18 @@ a:hover { color: var(--color-link-hover); text-decoration: underline; }
 /* ── Responsive: TOC sidebar hidden below 1200px ─────────────────────────── */
 /* At narrower widths there isn't room for all three columns; the sticky      */
 /* section heading already gives orientation on small screens.                */
-@media (max-width: 1200px) {
+@media (max-width: 1280px) {
   .toc-sidebar { display: none; }
 }
 
 /* ── Responsive: tablet (≤ 900px) — tighten layout ───────────────────────── */
 @media (max-width: 900px) {
   :root { --sidebar-width: 200px; }
-  .doc-main { padding: 2rem 0 3rem 1.75rem; }
+  .doc-main { padding: 2rem 1.75rem 3rem 1.75rem; }
   /* Adjust sticky heading margins to match reduced padding */
   .sticky-section-heading {
-    margin: -2rem -0.5rem 0 -1.75rem;
-    padding: 0 0.5rem 0 1.75rem;
+    margin: -2rem -1.75rem 0 -1.75rem;
+    padding: 0 1.75rem 0 1.75rem;
   }
 }
 
@@ -1530,6 +1547,8 @@ a:hover { color: var(--color-link-hover); text-decoration: underline; }
 svg.railroad-diagram {
   background: var(--color-bg-soft);
   border-radius: 4px;
+  display: block;
+  margin: 0 auto;
 }
 svg.railroad-diagram path {
   stroke-width: 3;

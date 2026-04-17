@@ -38,18 +38,24 @@ export default function DocPageTemplate({
   // Track which h2 section the user is currently reading and surface it
   // as a sticky label pinned just below the site header.
   useEffect(() => {
-    const getHeaderH = () =>
-      parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--header-h')) || 56
+    // When navigating to a hash, scroll-behavior:smooth means the browser
+    // animates the scroll over ~400-600ms. We set the sticky heading immediately
+    // on hashchange and suppress the scroll handler until the animation is done.
+    // "Done" = no scroll event for 100ms (scroll-end detection).
+    let scrollSuppressed = false
+    let scrollEndTimer: ReturnType<typeof setTimeout> | null = null
 
     const update = () => {
-      const headerH = getHeaderH()
+      if (scrollSuppressed) return
       const headings = Array.from(
         document.querySelectorAll<HTMLElement>('.doc-content h2, .doc-content h3'),
       )
+      const scrollMargin = headings[0]
+        ? parseFloat(getComputedStyle(headings[0]).scrollMarginTop) || 0
+        : 0
       let current: HTMLElement | null = null
       for (const h of headings) {
-        // A heading is "past" when its bottom edge has scrolled above the sticky bar
-        if (h.getBoundingClientRect().bottom <= headerH + 2) {
+        if (h.getBoundingClientRect().top <= scrollMargin + 4) {
           current = h
         } else {
           break
@@ -58,9 +64,38 @@ export default function DocPageTemplate({
       setStickyHeading(current ? (current.textContent ?? null) : null)
     }
 
-    window.addEventListener('scroll', update, { passive: true })
+    const onScroll = () => {
+      if (scrollSuppressed) {
+        // Keep resetting the scroll-end timer while smooth scroll is in flight
+        if (scrollEndTimer) clearTimeout(scrollEndTimer)
+        scrollEndTimer = setTimeout(() => {
+          scrollSuppressed = false
+          update()
+        }, 100)
+        return
+      }
+      update()
+    }
+
+    const onHashChange = () => {
+      const id = window.location.hash.slice(1)
+      if (!id) return
+      const el = document.getElementById(id)
+      if (el?.closest('.doc-content')) {
+        setStickyHeading(el.textContent ?? null)
+        scrollSuppressed = true
+        if (scrollEndTimer) clearTimeout(scrollEndTimer)
+      }
+    }
+
+    window.addEventListener('scroll', onScroll, { passive: true })
+    window.addEventListener('hashchange', onHashChange)
     update()
-    return () => window.removeEventListener('scroll', update)
+    return () => {
+      window.removeEventListener('scroll', onScroll)
+      window.removeEventListener('hashchange', onHashChange)
+      if (scrollEndTimer) clearTimeout(scrollEndTimer)
+    }
   }, [])
 
   return (
