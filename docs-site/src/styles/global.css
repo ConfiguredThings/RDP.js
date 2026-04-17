@@ -36,7 +36,9 @@
   --max-width:     860px;
   --sidebar-width: 240px;
   --toc-width:     var(--sidebar-width);
-  --header-h:       56px;
+  --nav-h:          56px;
+  --banner-h:       2rem;
+  --header-h:       calc(var(--nav-h) + var(--banner-h));
 }
 
 @media (prefers-color-scheme: dark) {
@@ -90,7 +92,7 @@ a:hover { color: var(--color-link-hover); text-decoration: underline; }
   display: flex;
   align-items: center;
   gap: 2rem;
-  height: var(--header-h);
+  height: var(--nav-h);
 }
 
 .site-logo {
@@ -317,13 +319,12 @@ a:hover { color: var(--color-link-hover); text-decoration: underline; }
 /* ── Unstable banner ──────────────────────────────────────────────────────── */
 .unstable-banner {
   background: #fff8e1;
-  border: 1px solid #f9a825;
-  border-radius: 4px;
-  padding: 0.5rem 0.85rem;
-  margin-bottom: 1.5rem;
-  font-size: 0.85rem;
+  border-bottom: 1px solid #f9a825;
+  padding: 0.35rem 1.5rem;
+  font-size: 0.8rem;
   color: #5f4200;
   line-height: 1.5;
+  text-align: center;
 }
 
 /* ── Prose ────────────────────────────────────────────────────────────────── */

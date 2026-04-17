@@ -7,10 +7,11 @@ export function SiteHeader() {
 
   return (
     <>
-      <div className="unstable-banner">
-        <strong>v0 — unstable API.</strong> Minor versions may introduce breaking changes until 1.0.
-      </div>
       <header className="site-header">
+        <div className="unstable-banner">
+          <strong>v0 — unstable API.</strong> Minor versions may introduce breaking changes until
+          1.0.
+        </div>
         <div className="site-header-inner">
           <div className="site-logo">
             <a href="https://configuredthings.com" target="_blank" rel="noopener noreferrer">
