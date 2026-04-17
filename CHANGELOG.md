@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-04-17
+
 ### Added
 
 - `--scaffold` now accepts a composable `--inner <strategy>` option that specifies the traversal strategy embedded inside `facade` and `pipeline` wrappers. Eight combinations are now available: two standalone (`interpreter`, `tree-walker`) and six composable (`facade --inner interpreter`, `facade --inner tree-walker`, `facade --inner pipeline:interpreter`, `facade --inner pipeline:tree-walker`, `pipeline --inner interpreter`, `pipeline --inner tree-walker`). `facade` and `pipeline` require `--inner`; `interpreter` and `tree-walker` forbid it.
@@ -79,7 +81,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bootstrapping meta-grammars: EBNF and ABNF formats each described in both EBNF and ABNF (`src/grammars/`)
 - Left-recursion detection at grammar compilation time
 
-[unreleased]: https://github.com/ConfiguredThings/RDP.js/compare/v0.3.0...HEAD
+[unreleased]: https://github.com/ConfiguredThings/RDP.js/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/ConfiguredThings/RDP.js/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/ConfiguredThings/RDP.js/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/ConfiguredThings/RDP.js/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/ConfiguredThings/RDP.js/releases/tag/v0.1.0

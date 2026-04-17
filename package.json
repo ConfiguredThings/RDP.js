@@ -1,6 +1,6 @@
 {
   "name": "@configuredthings/rdp.js",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "A minimal typed base class for writing recursive descent parsers in TypeScript",
   "author": {
     "name": "Configured Things Ltd.",
