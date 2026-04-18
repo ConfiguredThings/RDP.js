@@ -1,0 +1,33 @@
+@startuml transformer-dispatch
+skinparam defaultFontName monospace
+skinparam ArrowColor #2d4a70
+skinparam ArrowFontColor #2d4a70
+skinparam ArrowFontSize 10
+skinparam ParticipantBorderColor #0056A3
+skinparam ParticipantBorderThickness 1.5
+skinparam ParticipantBackgroundColor #cce8ff
+skinparam SequenceLifeLineBorderColor #7aaacc
+skinparam BackgroundColor transparent
+skinparam NoteBackgroundColor #eef3fa
+skinparam NoteBorderColor #7aaacc
+
+participant "caller" as C
+participant "transform(node, transformer)" as T
+participant "transformer['Number']" as H
+
+note over C
+  node.kind = 'Number'
+end note
+
+C -> T : transform(node, transformer)
+T -> T : look up transformer[node.kind]
+T -> H : handler(node)
+note over T
+  All handlers are required.
+  A missing kind is a compile error
+  on the Transformer object literal.
+end note
+H --> T : result
+T --> C : result  ──  always T, never undefined
+
+@enduml

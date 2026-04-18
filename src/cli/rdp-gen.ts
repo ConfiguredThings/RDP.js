@@ -14,7 +14,14 @@ import type { ScaffoldPattern, ScaffoldInner } from '../generator/index.js'
 import { EBNFParser } from '../generator/ebnf-parser.js'
 import { ABNFParser } from '../generator/abnf-parser.js'
 
-const SCAFFOLD_PATTERNS: ScaffoldPattern[] = ['interpreter', 'facade', 'pipeline', 'tree-walker']
+const SCAFFOLD_PATTERNS: ScaffoldPattern[] = [
+  'interpreter',
+  'facade',
+  'pipeline',
+  'tree-walker',
+  'transformer',
+  'json-transformer',
+]
 const SCAFFOLD_INNER_VALUES: ScaffoldInner[] = [
   'interpreter',
   'tree-walker',
@@ -121,7 +128,13 @@ function runGenerate(rawArgs: string[]): void {
       console.error(`rdp-gen: --scaffold ${pattern} requires --inner. Pass --inner ${validInner}.`)
       process.exit(1)
     }
-    if ((pattern === 'interpreter' || pattern === 'tree-walker') && innerRaw) {
+    if (
+      (pattern === 'interpreter' ||
+        pattern === 'tree-walker' ||
+        pattern === 'transformer' ||
+        pattern === 'json-transformer') &&
+      innerRaw
+    ) {
       console.error(`rdp-gen: --inner is not applicable to --scaffold ${pattern}.`)
       process.exit(1)
     }
@@ -241,10 +254,12 @@ Options:
   --tree-name <name>                 type name for the generated parse tree (default: ParseTree)
   --observable                       extend ObservableRDParser; adds notifyEnter/notifyExit calls
   --scaffold <pattern>               emit a one-time usage scaffold instead of the parser
-                                     interpreter  one typed function per rule, ready to fill in
-                                     facade       module-as-facade with domain class and error type (requires --inner)
-                                     pipeline     parse / validate / transform stages (requires --inner)
-                                     tree-walker  walk() utility using childNodes with visitor stubs
+                                     interpreter       one typed function per rule, ready to fill in
+                                     facade            module-as-facade with domain class and error type (requires --inner)
+                                     pipeline          parse / validate / transform stages (requires --inner)
+                                     tree-walker       walk() utility using childNodes with visitor stubs
+                                     transformer       exhaustive Transformer<ParseTree, T> object with stubs per rule
+                                     json-transformer  two-way Transformer stubs: ParseTree → JSONAST and JSONAST → string
   --inner <strategy>                 inner traversal strategy for facade and pipeline scaffolds
                                      interpreter          recursive eval functions
                                      tree-walker          childNodes-based tree walker with visitor stubs

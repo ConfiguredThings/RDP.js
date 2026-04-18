@@ -697,6 +697,158 @@ describe('pipeline + tree-walker scaffold — runtime', () => {
   })
 })
 
+// ── Transformer scaffold ──────────────────────────────────────────────────────
+
+describe('generateScaffold — transformer', () => {
+  let output: string
+
+  beforeAll(() => {
+    output = generateScaffold(DATE_GRAMMAR, 'transformer', { parserName: PARSER_NAME })
+  })
+
+  it('imports the parser, all node types, and ParseTree', () => {
+    expect(output).toContain(`  ${PARSER_NAME},`)
+    expect(output).toContain(`  type DateNode,`)
+    expect(output).toContain(`  type YearNode,`)
+    expect(output).toContain(`  type DigitNode,`)
+    expect(output).toContain(`  type ParseTree,`)
+    expect(output).toContain(`} from './${PARSER_NAME}.js'`)
+  })
+
+  it('imports transform and Transformer from the runtime', () => {
+    expect(output).toContain(`transform`)
+    expect(output).toContain(`type Transformer`)
+    expect(output).toContain(`'@configuredthings/rdp.js'`)
+  })
+
+  it('emits an exported Transformer<ParseTree, unknown> object', () => {
+    expect(output).toContain(`export const dateTransformer: Transformer<ParseTree, unknown>`)
+  })
+
+  it('has a handler stub for every grammar rule', () => {
+    for (const rule of ['Date', 'Year', 'Month', 'Day', 'Digit']) {
+      expect(output).toContain(`'${rule}'(node: ${rule}Node): unknown`)
+    }
+  })
+
+  it('emits a transformDate() entry point', () => {
+    expect(output).toContain(`export function transformDate(input: string): unknown`)
+    expect(output).toContain(`transform(${PARSER_NAME}.parse(input), dateTransformer)`)
+  })
+
+  it('throws when --inner is supplied', () => {
+    expect(() =>
+      generateScaffold(DATE_GRAMMAR, 'transformer', {
+        parserName: PARSER_NAME,
+        inner: 'interpreter',
+      }),
+    ).toThrow(/--inner is not applicable to --scaffold transformer/)
+  })
+})
+
+// ── JSON transformer scaffold ─────────────────────────────────────────────────
+
+describe('generateScaffold — json-transformer', () => {
+  let output: string
+
+  beforeAll(() => {
+    output = generateScaffold(DATE_GRAMMAR, 'json-transformer', { parserName: PARSER_NAME })
+  })
+
+  it('imports the parser, all node types, and ParseTree', () => {
+    expect(output).toContain(`  ${PARSER_NAME},`)
+    expect(output).toContain(`  type DateNode,`)
+    expect(output).toContain(`  type DigitNode,`)
+    expect(output).toContain(`  type ParseTree,`)
+  })
+
+  it('imports transform, Transformer, toJSONAST, fromJSONAST, and JSONAST from the runtime', () => {
+    expect(output).toContain(`transform`)
+    expect(output).toContain(`type Transformer`)
+    expect(output).toContain(`toJSONAST`)
+    expect(output).toContain(`fromJSONAST`)
+    expect(output).toContain(`type JSONAST`)
+    expect(output).toContain(`'@configuredthings/rdp.js'`)
+  })
+
+  it('emits a dateToJSON Transformer<ParseTree, JSONAST>', () => {
+    expect(output).toContain(`export const dateToJSON: Transformer<ParseTree, JSONAST>`)
+  })
+
+  it('has a JSONAST handler stub for every grammar rule', () => {
+    for (const rule of ['Date', 'Year', 'Month', 'Day', 'Digit']) {
+      expect(output).toContain(`'${rule}'(node: ${rule}Node): JSONAST`)
+    }
+  })
+
+  it('emits a jsonToDate Transformer<JSONAST, string> with all six JSON kinds', () => {
+    expect(output).toContain(`export const jsonToDate: Transformer<JSONAST, string>`)
+    for (const kind of ['string', 'number', 'boolean', 'null', 'array', 'object']) {
+      expect(output).toContain(`${kind}(node`)
+    }
+  })
+
+  it('emits dateToJSONString() and jsonStringToDate() round-trip helpers', () => {
+    expect(output).toContain(`export function dateToJSONString(input: string): string`)
+    expect(output).toContain(`fromJSONAST(transform(${PARSER_NAME}.parse(input), dateToJSON))`)
+    expect(output).toContain(`export function jsonStringToDate(input: string): string`)
+    expect(output).toContain(`transform(toJSONAST(input), jsonToDate)`)
+  })
+
+  it('throws when --inner is supplied', () => {
+    expect(() =>
+      generateScaffold(DATE_GRAMMAR, 'json-transformer', {
+        parserName: PARSER_NAME,
+        inner: 'interpreter',
+      }),
+    ).toThrow(/--inner is not applicable to --scaffold json-transformer/)
+  })
+})
+
+// ── Scaffold runtime — transformer ────────────────────────────────────────────
+
+describe('transformer scaffold — runtime', () => {
+  let transformDate: (input: string) => unknown
+
+  beforeAll(async () => {
+    const parserSource = generateParser(DATE_GRAMMAR, { parserName: PARSER_NAME })
+    const scaffoldSource = generateScaffold(DATE_GRAMMAR, 'transformer', {
+      parserName: PARSER_NAME,
+    })
+    const { scaffold } = await importScaffold(scaffoldSource, parserSource, PARSER_NAME)
+    transformDate = scaffold['transformDate'] as (input: string) => unknown
+  })
+
+  it('reaches the not-implemented stub on valid input', () => {
+    expect(() => transformDate('2024-01-15')).toThrow('not implemented')
+  })
+})
+
+// ── Scaffold runtime — json-transformer ──────────────────────────────────────
+
+describe('json-transformer scaffold — runtime', () => {
+  let dateToJSONString: (input: string) => string
+  let jsonStringToDate: (input: string) => string
+
+  beforeAll(async () => {
+    const parserSource = generateParser(DATE_GRAMMAR, { parserName: PARSER_NAME })
+    const scaffoldSource = generateScaffold(DATE_GRAMMAR, 'json-transformer', {
+      parserName: PARSER_NAME,
+    })
+    const { scaffold } = await importScaffold(scaffoldSource, parserSource, PARSER_NAME)
+    dateToJSONString = scaffold['dateToJSONString'] as (input: string) => string
+    jsonStringToDate = scaffold['jsonStringToDate'] as (input: string) => string
+  })
+
+  it('dateToJSONString() reaches the not-implemented stub on valid input', () => {
+    expect(() => dateToJSONString('2024-01-15')).toThrow('not implemented')
+  })
+
+  it('jsonStringToDate() reaches the not-implemented stub on valid JSON', () => {
+    expect(() => jsonStringToDate('"2024-01-15"')).toThrow('not implemented')
+  })
+})
+
 // ── Init scaffold ─────────────────────────────────────────────────────────────
 
 describe('generateInitScaffold', () => {

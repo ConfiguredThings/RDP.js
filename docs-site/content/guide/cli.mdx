@@ -87,8 +87,8 @@ and the [arithmetic worked example](/docs/arith-example/) for all patterns
 applied to a real grammar.
 
 The `facade` and `pipeline` patterns are structural wrappers and require `--inner`
-to specify the traversal strategy they wrap. The `interpreter` and `tree-walker` patterns
-are standalone and do not accept `--inner`.
+to specify the traversal strategy they wrap. The `interpreter`, `tree-walker`,
+`transformer`, and `json-transformer` patterns are standalone and do not accept `--inner`.
 
 | `--scaffold` | `--inner` | What it emits |
 |---|---|---|
@@ -100,6 +100,8 @@ are standalone and do not accept `--inner`.
 | `facade` | `pipeline:tree-walker` | As above but `#transform` uses a tree walker |
 | `pipeline` | `interpreter` | Exported `parse`/`validate`/`transform` + `load{Base}()` combinator; eval inside `transform` |
 | `pipeline` | `tree-walker` | As above but `transform` uses a tree walker |
+| `transformer` | — | Exported `Transformer<ParseTree, unknown>` object with a stub per rule + entry function |
+| `json-transformer` | — | Two-way stubs: `{Base}ToJSON: Transformer<ParseTree, JSONAST>` and `jsonTo{Base}: Transformer<JSONAST, string>` plus round-trip helpers |
 
 The typical workflow for a new grammar:
 
@@ -166,6 +168,39 @@ rdp-gen date.ebnf --parser-name DateParser --scaffold pipeline --inner interpret
 # Pipeline with tree walker inside transform
 rdp-gen date.ebnf --parser-name DateParser --scaffold pipeline --inner tree-walker --output src/date-pipeline.ts
 ```
+
+#### `transformer` scaffold
+
+Emits an exported `Transformer<ParseTree, unknown>` object with one handler stub per
+grammar rule, plus a `transform{Base}()` entry function. Replace `unknown` with your
+concrete return type, then fill in the handlers. Because `Transformer` requires all keys,
+adding a new rule to the grammar will immediately cause a compile error in the scaffold:
+
+```bash
+rdp-gen date.ebnf --parser-name DateParser --scaffold transformer --output src/date-transformer.ts
+```
+
+See [`Transformer<ParseTree, T>` and `transform()`](/docs/parse-tree/#transformer-parsetree-t-and-transform)
+for the runtime API.
+
+#### `json-transformer` scaffold
+
+Emits two `Transformer` objects — one for each direction — plus convenience round-trip
+functions. This is the recommended starting point when JSON is one endpoint of your
+translation:
+
+```bash
+rdp-gen date.ebnf --parser-name DateParser --scaffold json-transformer --output src/date-json.ts
+```
+
+The generated file contains:
+- `dateToJSON: Transformer<ParseTree, JSONAST>` — one stub per grammar rule
+- `jsonToDate: Transformer<JSONAST, string>` — one stub per JSON kind (`string`, `number`, `boolean`, `null`, `array`, `object`)
+- `dateToJSONString(input: string): string` — parses the input and calls `fromJSONAST`
+- `jsonStringToDate(input: string): string` — calls `toJSONAST` and emits your format
+
+See [Translating to and from JSON](/docs/parse-tree/#translating-to-and-from-json) for
+the runtime API and a worked example.
 
 See [Using the Parse Tree](/docs/parse-tree/) for worked examples of each pattern.
 

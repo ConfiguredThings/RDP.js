@@ -1,0 +1,67 @@
+@startuml two-way-translation
+skinparam componentStyle rectangle
+skinparam defaultFontName monospace
+skinparam ArrowColor #2d4a70
+skinparam ArrowFontColor #2d4a70
+skinparam ArrowFontSize 10
+skinparam ComponentBorderColor #0056A3
+skinparam ComponentBorderThickness 1.5
+skinparam ComponentBackgroundColor #cce8ff
+skinparam PackageBorderColor #7aaacc
+skinparam PackageBorderThickness 1.5
+skinparam BackgroundColor transparent
+skinparam NoteBackgroundColor #eef3fa
+skinparam NoteBorderColor #7aaacc
+
+skinparam component<<ir>> {
+  BackgroundColor #0056A3
+  FontColor white
+  BorderColor #003d7a
+}
+
+skinparam component<<out>> {
+  BackgroundColor #b8d4eb
+  BorderColor #5a8fbb
+}
+
+top to bottom direction
+
+package "Parse" #eef3fa {
+  component "ArithParser.parse()\n→ ArithTree" as parseArith
+  component "RPNParser.parse()\n→ RPNTree" as parseRPN
+}
+
+component "IR" <<ir>> as IR
+
+package "Emit" #eef3fa {
+  component "irToRPN\nTransformer<IR, string>" as emitRPN
+  component "irToJSONAST\nTransformer<IR, JSONAST>" as emitJSON
+}
+
+package "JSON bridge" #dce8f5 {
+  component "fromJSONAST()" as fromJSON
+  component "toJSONAST()" as toJSON
+}
+
+component "\"2 3 4 * +\"" <<out>> as outRPN
+component "\"{op: '+', ...}\"" <<out>> as outJSON
+
+parseArith -down-> IR : arithToIR\nTransformer<ArithTree, IR>
+parseRPN   -down-> IR : rpnToIR\n(stack-based)
+
+IR -down-> emitRPN
+IR -down-> emitJSON
+
+emitRPN  -down-> outRPN
+emitJSON -down-> fromJSON
+fromJSON -down-> outJSON
+
+toJSON -up-> IR : Transformer<JSONAST, IR>\n(reverse path)
+
+note bottom of toJSON
+  toJSONAST / fromJSONAST are the
+  JSON parser and emitter —
+  no grammar needed on the JSON side.
+end note
+
+@enduml
