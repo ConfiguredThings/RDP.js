@@ -1,7 +1,7 @@
 {
   "name": "@configuredthings/rdp.js",
-  "version": "0.4.0",
-  "description": "A minimal typed base class for writing recursive descent parsers in TypeScript",
+  "version": "0.5.0",
+  "description": "A minimal typed base class for writing recursive descent parsers in TypeScript, with a focus on ease of use and extensibility. Also includes a CLI tool that can generate parsers from EBNF or ABNF grammars, with support for generating scaffolding for tree walkers, interpreters, facades, semantic validation piepelines, and two-way transformers",
   "author": {
     "name": "Configured Things Ltd.",
     "email": "engineering@configuredthings.com",
