@@ -80,6 +80,8 @@ Run the scaffolds once, then edit the output freely — they are **not** regener
 | `facade` | `--scaffold facade --inner interpreter` | Hiding the parser behind a clean domain API |
 | `pipeline` | `--scaffold pipeline --inner interpreter` | Multi-stage parse → validate → transform |
 | `tree-walker` | `--scaffold tree-walker` | Tree traversal with per-node visitor dispatch |
+| `transformer` | `--scaffold transformer` | Exhaustive conversion to a typed IR or output |
+| `json-transformer` | `--scaffold json-transformer` | Two-way translation to/from JSON |
 
 ---
 
@@ -276,6 +278,142 @@ export function walk(root: ArithTree, fn: (node: ArithTree) => void): void {
 ```
 
 Full file: [`arith-walker.ts`](/api/functions/ArithExample.walk.html)
+
+---
+
+### Translation: Arith to RPN and JSON
+
+The arithmetic grammar makes a good translation example because two different surface
+forms — infix (`2 + 3 * 4`) and Reverse Polish Notation (`2 3 4 * +`) — represent
+exactly the same semantic content. By lowering both to a shared IR (intermediate representation — a semantic data
+structure independent of either surface syntax) first, translating between them
+(and to JSON) becomes a matter of swapping emitters.
+
+#### The shared IR
+
+```ts
+type IR =
+  | { kind: 'num';   value: number }
+  | { kind: 'binop'; op: '+' | '-' | '*' | '/'; left: IR; right: IR }
+```
+
+The IR captures *semantics*, not syntax. It knows nothing about whitespace, parentheses,
+or operator precedence rules — those are artefacts of the surface format.
+
+#### Arith → IR
+
+The `--scaffold transformer` command generates the starting point:
+
+```bash
+rdp-gen src/grammars/arith.ebnf \
+  --parser-name ArithParser \
+  --tree-name ArithTree \
+  --scaffold transformer \
+  --output examples/arith/arith-to-ir.ts
+```
+
+Filling in the stubs (leaf nodes `Digit` and `wsp` are consumed by their parents and
+should never be dispatched — the throws document that reaching them is a bug):
+
+```ts
+import { transform, type Transformer } from '@configuredthings/rdp.js'
+import type { ArithTree, ExprNode, TermNode, FactorNode, NumberNode, DigitNode, WspNode } from './ArithParser.js'
+
+type IR =
+  | { kind: 'num';   value: number }
+  | { kind: 'binop'; op: '+' | '-' | '*' | '/'; left: IR; right: IR }
+
+export const arithToIR: Transformer<ArithTree, IR> = {
+
+  Expr(n: ExprNode): IR {
+    let result = transform(n.term, arithToIR)
+    for (const op of n.item2)
+      result = { kind: 'binop', op: op.item1 as IR['op'], left: result, right: transform(op.term, arithToIR) }
+    return result
+  },
+
+  Term(n: TermNode): IR {
+    let result = transform(n.factor, arithToIR)
+    for (const op of n.item1)
+      result = { kind: 'binop', op: op.item1 as IR['op'], left: result, right: transform(op.factor, arithToIR) }
+    return result
+  },
+
+  Factor(n: FactorNode): IR {
+    const inner = n.item0
+    // item0 is either a parenthesised Expr or a Number
+    return 'kind' in inner ? transform(inner, arithToIR) : transform(inner.expr, arithToIR)
+  },
+
+  Number(n: NumberNode): IR {
+    const digits = n.digit.item0 + n.item1.map((d) => d.item0).join('')
+    return { kind: 'num', value: parseInt(digits, 10) }
+  },
+
+  // Leaf nodes consumed by their parents — dispatching to them is a bug
+  Digit(_: DigitNode): IR { throw new Error('Digit consumed by Number, not dispatched') },
+  wsp(_: WspNode):     IR { throw new Error('wsp consumed by Expr, not dispatched') },
+}
+```
+
+#### IR → RPN
+
+```ts
+export const irToRPN: Transformer<IR, string> = {
+  num(n)   { return String(n.value) },
+  binop(n) {
+    return `${transform(n.left, irToRPN)} ${transform(n.right, irToRPN)} ${n.op}`
+  },
+}
+```
+
+#### IR → JSON
+
+```bash
+rdp-gen src/grammars/arith.ebnf \
+  --parser-name ArithParser \
+  --tree-name ArithTree \
+  --scaffold json-transformer \
+  --output examples/arith/arith-json.ts
+```
+
+The `json-transformer` scaffold generates stubs for both directions. The `irToJSONAST`
+direction, filled in:
+
+```ts
+import { transform, type Transformer, fromJSONAST, type JSONAST } from '@configuredthings/rdp.js'
+
+const irToJSONAST: Transformer<IR, JSONAST> = {
+  num(n) {
+    return { kind: 'number', value: n.value }
+  },
+  binop(n) {
+    return {
+      kind: 'object',
+      entries: [
+        { key: 'op',    value: { kind: 'string', value: n.op } },
+        { key: 'left',  value: transform(n.left,  irToJSONAST) },
+        { key: 'right', value: transform(n.right, irToJSONAST) },
+      ],
+    }
+  },
+}
+```
+
+#### Round-trip
+
+```ts
+import { ArithParser } from './ArithParser.js'
+
+const toRPN  = (input: string) =>
+  transform(transform(ArithParser.parse(input), arithToIR), irToRPN)
+
+const toJSON = (input: string) =>
+  fromJSONAST(transform(transform(ArithParser.parse(input), arithToIR), irToJSONAST))
+
+toRPN('2 + 3 * 4')   // → "2 3 4 * +"
+toJSON('2 + 3 * 4')  // → '{"op":"+","left":2,"right":{"op":"*","left":3,"right":4}}'
+```
 
 ---
 

@@ -202,9 +202,9 @@ domain. You need to traverse every node, and you may want several independent pa
 over the same tree. For complex tools, consider [lowering the CST to an AST](#cst-and-ast)
 before applying your visitor passes.
 
-There are two pieces. The `Visitor<T>` type and `visit()` function come from the
-`@configuredthings/rdp.js` runtime and work with any generated grammar. The
-`childNodes()` function is grammar-specific and is always emitted alongside the generated parser.
+There are three runtime pieces — `Visitor<T>` + `visit()` for partial dispatch,
+`Transformer<T>` + `transform()` for exhaustive conversion — and one grammar-specific
+function, `childNodes()`, always emitted alongside the generated parser.
 
 ```bash
 rdp-gen expr.ebnf --parser-name ExprParser --output src/ExprParser.ts
@@ -318,6 +318,172 @@ function maxDepth(node: ParseTree): number {
   return kids.length === 0 ? 1 : 1 + Math.max(...kids.map(maxDepth))
 }
 ```
+
+#### `Transformer<ParseTree, T>` and `transform()`
+
+`Visitor` is intentionally partial — you handle the nodes you care about and ignore
+the rest. When you need the opposite guarantee — every node kind must be handled and
+a missing case is a compile error — use `Transformer`. This makes it the right tool
+for exhaustive conversion: translating a parse tree to a domain IR, emitting to
+another format, or any case where an unhandled node kind is a bug rather than a
+deliberate omission.
+
+![transform() dispatch: caller passes node (kind='Number') and transformer to transform(); transform looks up transformer['Number']; the handler is always called (no undefined path) and the result returned; a missing kind is a compile error on the object literal](/transformer-dispatch.svg)
+
+```ts
+import { transform, type Transformer } from '@configuredthings/rdp.js'
+import type { ParseTree } from './ExprParser.js'
+
+const evaluator: Transformer<ParseTree, number> = {
+  Expr:   (n) => { /* ... */ return 0 },
+  Term:   (n) => { /* ... */ return 0 },
+  Factor: (n) => { /* ... */ return 0 },
+  Number: (n) => parseInt(n.digit.item0, 10),
+  Digit:  (n) => parseInt(n.item0, 10),
+  // Omitting any key here is a TypeScript compile error
+}
+
+const result = transform(ExprParser.parse('2 + 3'), evaluator)  // number, never undefined
+```
+
+|                 | `Visitor<Tree, T>` + `visit()` | `Transformer<Tree, T>` + `transform()` |
+|-----------------|-------------------------------|----------------------------------------|
+| Handler keys    | Optional (`?`)                | Required                               |
+| Unhandled node  | Returns `undefined`           | Compile error                          |
+| Return type     | `T \| undefined`              | `T`                                    |
+| Use when        | Partial traversal, multiple passes | Exhaustive conversion             |
+
+`--scaffold transformer` generates a ready-to-fill `Transformer` object — see the
+[CLI reference](/docs/cli/#transformer-scaffold).
+
+#### Translating between two DSLs
+
+When both endpoints are grammars you own, scaffold a `transformer` for each, define a
+shared domain IR, and wire them together. The IR is the hub — every parser lowers into
+it, every emitter reads from it:
+
+```bash
+rdp-gen format-a.ebnf --parser-name FormatAParser --scaffold transformer --output src/format-a-transformer.ts
+rdp-gen format-b.ebnf --parser-name FormatBParser --scaffold transformer --output src/format-b-transformer.ts
+```
+
+Each scaffold gives you a `Transformer<FormatXTree, unknown>`. Replace `unknown` with
+your IR type and fill in the handlers:
+
+```ts
+// shared-ir.ts — define once, import everywhere
+export type IR =
+  | { kind: 'foo'; value: string }
+  | { kind: 'bar'; left: IR; right: IR }
+```
+
+```ts
+// format-a-transformer.ts (scaffolded, then filled in)
+import { transform, type Transformer } from '@configuredthings/rdp.js'
+import { FormatAParser, type FormatATree, type RootNode, /* ... */ } from './FormatAParser.js'
+import type { IR } from './shared-ir.js'
+
+export const formatAToIR: Transformer<FormatATree, IR> = {
+  Root:  (n) => ({ kind: 'foo', value: n.item0 }),
+  // ... one handler per rule
+}
+```
+
+The emitters go the other direction — `Transformer<IR, string>` — and don't need a
+scaffold since the IR is your own type, not derived from a grammar:
+
+```ts
+// format-b-emitter.ts — hand-written, no scaffold needed
+import { transform, type Transformer } from '@configuredthings/rdp.js'
+import type { IR } from './shared-ir.js'
+
+export const irToFormatB: Transformer<IR, string> = {
+  foo: (n) => n.value,
+  bar: (n) => `${transform(n.left, irToFormatB)} + ${transform(n.right, irToFormatB)}`,
+}
+```
+
+Round-trip:
+
+```ts
+import { FormatAParser } from './FormatAParser.js'
+import { FormatBParser } from './FormatBParser.js'
+import { formatAToIR } from './format-a-transformer.js'
+import { formatBToIR } from './format-b-transformer.js'
+import { irToFormatA } from './format-a-emitter.js'
+import { irToFormatB } from './format-b-emitter.js'
+
+const aToB = (input: string) =>
+  transform(transform(FormatAParser.parse(input), formatAToIR), irToFormatB)
+
+const bToA = (input: string) =>
+  transform(transform(FormatBParser.parse(input), formatBToIR), irToFormatA)
+```
+
+Each parser, lowering transformer, and emitter is independent — adding a third format
+means writing one new scaffold + one new emitter without touching the others. For a
+complete worked example see
+[Translation: Arith to RPN and JSON](/docs/arith-example/#translation-arith-to-rpn-and-json).
+
+#### Translating to and from JSON
+
+A common use of `Transformer` is translating between a DSL and JSON. TypeScript has
+first-class JSON support via `JSON.parse` and `JSON.stringify`, and RDPjs provides
+`JSONAST` — a typed discriminated union over the six JSON value types — together with
+`toJSONAST` and `fromJSONAST` to convert between raw JSON strings and the union.
+
+`JSONAST` is the JSON output format, not a domain IR. When translating a DSL to JSON,
+the chain is:
+
+```
+FormatAST  →  domain IR  →  JSONAST  →  JSON string
+           Transformer    Transformer   fromJSONAST()
+```
+
+For simple grammars where the JSON structure *is* the semantics you can translate
+directly from `FormatAST` to `JSONAST`, skipping the domain IR step.
+
+![Two-way translation diamond: ArithParser and RPNParser both feed a shared IR; the IR fans out to an irToRPN Transformer emitting an RPN string, and to an irToJSONAST Transformer feeding fromJSONAST to produce a JSON string; toJSONAST feeds back up to the IR for the reverse path](/two-way-translation.svg)
+
+```ts
+import { toJSONAST, fromJSONAST, type JSONAST } from '@configuredthings/rdp.js'
+
+const ast  = toJSONAST('{"x":1}')   // JSONAST (kind: 'object')
+const text = fromJSONAST(ast)        // '{"x":1}'
+```
+
+`toJSONAST` wraps `JSON.parse` and hides the `any` return type; `fromJSONAST` wraps
+`JSON.stringify`. `Transformer<JSONAST, string>` handles the reverse path — one handler
+per JSON kind:
+
+```ts
+import { transform, type Transformer, toJSONAST, fromJSONAST, type JSONAST } from '@configuredthings/rdp.js'
+import { MyParser, type MyTree } from './MyParser.js'
+
+// Format → JSONAST
+const myFormatToJSON: Transformer<MyTree, JSONAST> = {
+  Root:  (n) => ({ kind: 'object', entries: [ /* ... */ ] }),
+  Value: (n) => ({ kind: 'string', value: n.item0 }),
+  // ...
+}
+
+// JSONAST → Format string
+const jsonToMyFormat: Transformer<JSONAST, string> = {
+  string:  (n) => `"${n.value}"`,
+  number:  (n) => String(n.value),
+  boolean: (n) => n.value ? 'true' : 'false',
+  null:    ()  => 'null',
+  array:   (n) => `[ ${n.items.map(i => transform(i, jsonToMyFormat)).join(', ')} ]`,
+  object:  (n) => n.entries.map(e => `${e.key}: ${transform(e.value, jsonToMyFormat)}`).join('\n'),
+}
+
+const toJSON   = (input: string) => fromJSONAST(transform(MyParser.parse(input), myFormatToJSON))
+const toFormat = (input: string) => transform(toJSONAST(input), jsonToMyFormat)
+```
+
+`--scaffold json-transformer` generates ready-to-fill stubs for both directions — see the
+[CLI reference](/docs/cli/#json-transformer-scaffold). For a complete worked example see
+[Translation: Arith to RPN and JSON](/docs/arith-example/#translation-arith-to-rpn-and-json).
 
 ---
 
@@ -582,14 +748,22 @@ parseDate('not-a-date')  // throws InvalidDateError (syntax error)
 
 ### Scaffolding
 
-`rdp-gen --scaffold <pattern>` emits a typed starter file for any of the four
-patterns, wired up to your grammar — imports, entry points, stubs, and error handling
-already in place. The CLI flag names match the pattern names: `interpreter` for
-[interpreting](#interpreting) and `tree-walker` for [tree walking](#tree-walking).
+`rdp-gen --scaffold <pattern>` emits a typed starter file wired up to your grammar —
+imports, entry points, stubs, and error handling already in place. The CLI flag names
+match the pattern names:
+
+| `--scaffold` | Generates |
+|---|---|
+| `interpreter` | One `eval{Rule}()` function per rule + `evaluate()` entry point |
+| `tree-walker` | `walk()` utility + commented `Visitor` stubs for every rule |
+| `transformer` | `Transformer<ParseTree, unknown>` object with one stub per rule + entry function |
+| `json-transformer` | Two `Transformer` objects (format → JSONAST and JSONAST → format) + round-trip helpers |
+| `facade` | Public `parse{Base}()`, `{Base}Result` class, `{Base}Error` — wraps any `--inner` strategy |
+| `pipeline` | Exported `parse`/`validate`/`transform` stages + `load{Base}()` combinator |
 
 Because the patterns compose, you can run multiple scaffolds for the same grammar:
-for example, `--scaffold facade` for the public module and `--scaffold tree-walker` for
+for example, `--scaffold facade` for the public module and `--scaffold transformer` for
 the implementation it wraps. See
 [CLI Reference — `--scaffold`](/docs/cli/#--scaffold--generate-a-usage-scaffold),
-or the [arithmetic worked example](/docs/arith-example/) for all four patterns
+or the [arithmetic worked example](/docs/arith-example/) for all patterns
 applied to a complete grammar.

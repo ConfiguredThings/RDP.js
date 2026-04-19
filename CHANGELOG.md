@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `Transformer<Union, T>` type and `transform()` function exported from the main package — like `Visitor` but with **required** keys, giving a compile-time exhaustiveness guarantee that every `kind` in the union has a handler.
+- `JSONAST` discriminated union type (`string | number | boolean | null | array | object`), plus `toJSONAST` and `fromJSONAST` helpers, exported from the main package — a typed representation of JSON values for use as a `Transformer` target when translating a DSL to JSON.
+- `--scaffold transformer` — emits an exhaustive `Transformer<ParseTree, T>` object with one stub per grammar rule, plus a convenience `transform<Base>(input)` wrapper.
+- `--scaffold json-transformer` — emits two transformer stubs (`<base>ToJSON: Transformer<ParseTree, JSONAST>` and `jsonTo<Base>: Transformer<JSONAST, string>`) and round-trip helpers (`<base>ToJSONString` / `jsonStringTo<Base>`) for two-way translation between the grammar's format and JSON.
+
 ## [0.4.0] - 2026-04-17
 
 ### Added

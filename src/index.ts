@@ -11,6 +11,7 @@
 
 export { RDParser } from './rdparser.js'
 export { RDParserException } from './exception.js'
+export { type JSONAST, toJSONAST, fromJSONAST } from './json-ast.js'
 
 // ── Tree utilities ─────────────────────────────────────────────────────────────
 
@@ -65,4 +66,53 @@ export function visit<Union extends { kind: string }, T>(
   // with the corresponding handler parameter type through the mapped type.
   const fn = visitor[node.kind as Union['kind']] as ((n: Union) => T) | undefined
   return fn?.(node)
+}
+
+// ── Transformer ────────────────────────────────────────────────────────────────
+
+/**
+ * An exhaustive transformer map over a discriminated union.
+ *
+ * Like {@link Visitor} but with **required** keys — every `kind` in `Union` must
+ * have a handler. TypeScript will report a compile error on the object literal if
+ * any kind is missing, giving a compile-time exhaustiveness guarantee. Adding a
+ * new grammar rule will produce a type error in every transformer that has not
+ * been updated.
+ *
+ * @example
+ * ```ts
+ * import { transform, type Transformer } from '@configuredthings/rdp.js'
+ * import type { ParseTree } from './MyParser.js'
+ *
+ * const toString: Transformer<ParseTree, string> = {
+ *   Number: (n) => String(n.value),
+ *   BinaryExpr: (n) => `${transform(n.left, toString)} ${n.op} ${transform(n.right, toString)}`,
+ * }
+ * ```
+ */
+export type Transformer<Union extends { kind: string }, T> = {
+  [K in Union['kind']]: (node: Extract<Union, { kind: K }>) => T
+}
+
+/**
+ * Dispatch `node` to the matching handler in `transformer`.
+ *
+ * Unlike {@link visit}, this function always returns a `T` — there is no
+ * `undefined` case because {@link Transformer} requires a handler for every kind.
+ *
+ * @example
+ * ```ts
+ * const result = transform(node, {
+ *   Number: (n) => n.value,
+ *   BinaryExpr: (n) => transform(n.left, eval) + transform(n.right, eval),
+ * })
+ * ```
+ */
+export function transform<Union extends { kind: string }, T>(
+  node: Union,
+  transformer: Transformer<Union, T>,
+): T {
+  // Same unavoidable cast as visit(): the mapped type cannot correlate kind → handler type.
+  const fn = transformer[node.kind as Union['kind']] as (n: Union) => T
+  return fn(node)
 }
