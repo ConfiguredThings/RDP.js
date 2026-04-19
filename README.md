@@ -22,7 +22,7 @@ A minimal, typed base class that handles buffer management and position tracking
 Key components:
 - **`RDParser`** — base class; subclass and implement each production rule as a method
 - **`rdp-gen`** — CLI; reads an ISO 14977 EBNF or RFC 5234 ABNF grammar file and emits a strictly-typed TypeScript parser class and exported discriminated-union parse-tree types
-  - **`rdp-gen --scaffold`** — generates for a given grammar a one-time typed starter file for a named usage pattern (`interpreter`, `facade`, `pipeline`, `tree-walker`); composable via `--inner`
+  - **`rdp-gen --scaffold`** — generates for a given grammar a one-time typed starter file for a named usage pattern (`interpreter`, `facade`, `pipeline`, `tree-walker`, `transformer`, `json-transformer`); composable via `--inner`
   - **`rdp-gen init`** — scaffolds a complete new project with `package.json`, `tsconfig.json`, and a starter parser class
 - **`GrammarInterpreter`** — runtime interpreter; execute grammars without a code-generation step
 - **`ObservableRDParser`** — opt-in parse tracing via an attached `ParseObserver`
@@ -64,7 +64,8 @@ rdp-gen date.ebnf --parser-name DateParser --scaffold facade --inner interpreter
 
 `rdp-gen --scaffold <pattern>` emits a one-time typed starter file — imports,
 entry points, stubs, and error handling in place — ready to fill in. Standalone
-patterns: `interpreter`, `tree-walker`. Composable wrappers: `facade --inner <strategy>`,
+patterns: `interpreter`, `tree-walker`, `transformer`. Two-way transformer: `json-transformer` (scaffolds
+both `ParseTree → JSONAST` and `JSONAST → string` stubs in one file). Composable wrappers: `facade --inner <strategy>`,
 `pipeline --inner <strategy>`. See the
 [CLI reference](https://configuredthings.github.io/RDP.js/docs/cli/) for details.
 
