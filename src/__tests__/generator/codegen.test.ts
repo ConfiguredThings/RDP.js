@@ -444,3 +444,73 @@ describe('generated walker — runtime correctness', () => {
     ])
   })
 })
+
+// ── traversal: interpreter ────────────────────────────────────────────────────
+
+const DATE_GRAMMAR = `Date = Year, '-', Month, '-', Day;\nYear = Digit, Digit, Digit, Digit;\nMonth = Digit, Digit;\nDay = Digit, Digit;\nDigit = '0'|'1'|'2'|'3'|'4'|'5'|'6'|'7'|'8'|'9';`
+const PARSER_NAME = 'DateParser'
+
+describe('generateParser — traversal: interpreter', () => {
+  const src = generateParser(DATE_GRAMMAR, { parserName: PARSER_NAME, traversal: 'interpreter' })
+
+  it('emits scaffold header (not regenerated)', () => {
+    expect(src).toContain('not regenerated; edit freely')
+  })
+
+  it('imports InterpreterMixin from @configuredthings/rdp.js', () => {
+    expect(src).toMatch(/import \{[^}]*InterpreterMixin[^}]*\} from '@configuredthings\/rdp\.js'/)
+  })
+
+  it('class implements InterpreterMixin<ParseTree, unknown>', () => {
+    expect(src).toContain('implements InterpreterMixin<ParseTree, unknown>')
+  })
+
+  it('emits one eval stub per grammar rule', () => {
+    expect(src).toContain('evalDate(node: DateNode): unknown')
+    expect(src).toContain('evalYear(node: YearNode): unknown')
+    expect(src).toContain('evalMonth(node: MonthNode): unknown')
+    expect(src).toContain('evalDay(node: DayNode): unknown')
+    expect(src).toContain('evalDigit(node: DigitNode): unknown')
+  })
+
+  it('emits static evaluate() entry point', () => {
+    expect(src).toContain('static evaluate(input: string): unknown')
+    expect(src).toContain('parser.evalDate(parser.parse())')
+  })
+
+  it('type-checks without errors', () => {
+    expect(typeCheck(src)).toEqual([])
+  })
+})
+
+// ── traversal: tree-walker ────────────────────────────────────────────────────
+
+describe('generateParser — traversal: tree-walker', () => {
+  const src = generateParser(DATE_GRAMMAR, { parserName: PARSER_NAME, traversal: 'tree-walker' })
+
+  it('emits scaffold header (not regenerated)', () => {
+    expect(src).toContain('not regenerated; edit freely')
+  })
+
+  it('imports visit and Visitor from @configuredthings/rdp.js', () => {
+    expect(src).toMatch(/import \{[^}]*visit[^}]*\} from '@configuredthings\/rdp\.js'/)
+    expect(src).toMatch(/import \{[^}]*Visitor[^}]*\} from '@configuredthings\/rdp\.js'/)
+  })
+
+  it('exports walk()', () => {
+    expect(src).toContain('export function walk(root: ParseTree')
+  })
+
+  it('walk() uses childNodes for recursion', () => {
+    expect(src).toContain('for (const child of childNodes(root)) walk(child, fn)')
+  })
+
+  it('includes visitor template comment', () => {
+    expect(src).toContain(`// const visitor: Visitor<ParseTree> = {`)
+    expect(src).toContain(`//   'Date': (node) => { /* ... */ },`)
+  })
+
+  it('type-checks without errors', () => {
+    expect(typeCheck(src)).toEqual([])
+  })
+})

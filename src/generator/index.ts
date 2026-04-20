@@ -28,7 +28,14 @@
 
 export { generateParser } from './codegen.js'
 export type { GeneratorOptions } from './codegen.js'
-export { generateScaffold, generateInitScaffold } from './scaffold.js'
+export {
+  generateScaffold,
+  generateScaffoldFiles,
+  generateInitScaffold,
+  Traversal,
+  Transformer,
+  Lexer,
+} from './scaffold.js'
 export type { ScaffoldFlags, InitScaffoldOptions } from './scaffold.js'
 export type { GrammarAST, ProductionRule, RuleBody, CoreRuleName } from './ast.js'
 export { EBNFParser } from './ebnf-parser.js'

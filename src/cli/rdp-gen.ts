@@ -8,8 +8,16 @@
 
 import { parseArgs } from 'node:util'
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
+import { join } from 'node:path'
 import { createRequire } from 'node:module'
-import { generateParser, generateScaffold, generateInitScaffold } from '../generator/index.js'
+import {
+  generateScaffold,
+  generateScaffoldFiles,
+  generateInitScaffold,
+  Traversal,
+  Transformer,
+  Lexer,
+} from '../generator/index.js'
 import type { ScaffoldFlags } from '../generator/index.js'
 import { EBNFParser } from '../generator/ebnf-parser.js'
 import { ABNFParser } from '../generator/abnf-parser.js'
@@ -75,7 +83,7 @@ function runGenerate(rawArgs: string[]): void {
   const { values, positionals } = parseArgs({
     args: normArgs,
     options: {
-      output: { type: 'string', short: 'o' },
+      outdir: { type: 'string', short: 'o' },
       format: { type: 'string' },
       'parser-name': { type: 'string' },
       'tree-name': { type: 'string' },
@@ -123,8 +131,8 @@ function runGenerate(rawArgs: string[]): void {
   const traversalRaw = values['traversal']
   if (
     traversalRaw !== undefined &&
-    traversalRaw !== 'interpreter' &&
-    traversalRaw !== 'tree-walker'
+    traversalRaw !== Traversal.Interpreter &&
+    traversalRaw !== Traversal.TreeWalker
   ) {
     console.error(
       `rdp-gen: unknown --traversal value "${traversalRaw}". Valid values: interpreter, tree-walker`,
@@ -133,7 +141,11 @@ function runGenerate(rawArgs: string[]): void {
   }
 
   const transformerRaw = values['transformer']
-  if (transformerRaw !== undefined && transformerRaw !== 'standard' && transformerRaw !== 'json') {
+  if (
+    transformerRaw !== undefined &&
+    transformerRaw !== Transformer.Standard &&
+    transformerRaw !== Transformer.JSON
+  ) {
     console.error(
       `rdp-gen: unknown --transformer value "${transformerRaw}". Pass --transformer or --transformer json`,
     )
@@ -141,60 +153,50 @@ function runGenerate(rawArgs: string[]): void {
   }
 
   const lexerRaw = values['lexer']
-  if (lexerRaw !== undefined && lexerRaw !== 'scannerless' && lexerRaw !== 'span') {
+  if (lexerRaw !== undefined && lexerRaw !== Lexer.Scannerless && lexerRaw !== Lexer.Span) {
     console.error(
       `rdp-gen: unknown --lexer value "${lexerRaw}". Valid values: scannerless (default), span`,
     )
     process.exit(1)
   }
 
-  const isScaffoldMode =
-    traversalRaw !== undefined ||
-    transformerRaw !== undefined ||
-    values['facade'] === true ||
-    values['pipeline'] === true
-
-  let output: string
-  if (values['ast-only']) {
-    const ast = format === 'abnf' ? ABNFParser.parse(source) : EBNFParser.parse(source)
-    output = JSON.stringify(ast, null, 2)
-  } else if (lexerRaw === 'span') {
-    // Span-lexer path — independent of scaffold mode; --traversal interpreter optionally
-    // wires evaluation directly into the TokenParser methods.
-    const flags: ScaffoldFlags = {
-      lexer: 'span',
-      ...(traversalRaw === 'interpreter' && { traversal: 'interpreter' }),
-    }
-    try {
-      output = generateScaffold(source, flags, generatorOptions)
-    } catch (e) {
-      console.error(`rdp-gen: ${e instanceof Error ? e.message : String(e)}`)
-      process.exit(1)
-    }
-  } else if (isScaffoldMode) {
-    const flags: ScaffoldFlags = {
-      ...(traversalRaw !== undefined && {
-        traversal: traversalRaw as 'interpreter' | 'tree-walker',
-      }),
-      ...(transformerRaw !== undefined && {
-        transformer: transformerRaw as 'standard' | 'json',
-      }),
-      ...(values['facade'] === true && { facade: true }),
-      ...(values['pipeline'] === true && { pipeline: true }),
-    }
-    try {
-      output = generateScaffold(source, flags, generatorOptions)
-    } catch (e) {
-      console.error(`rdp-gen: ${e instanceof Error ? e.message : String(e)}`)
-      process.exit(1)
-    }
-  } else {
-    output = generateParser(source, generatorOptions)
+  const flags: ScaffoldFlags = {
+    ...(traversalRaw !== undefined && { traversal: traversalRaw as Traversal }),
+    ...(transformerRaw !== undefined && { transformer: transformerRaw as Transformer }),
+    ...(values['facade'] === true && { facade: true }),
+    ...(values['pipeline'] === true && { pipeline: true }),
+    ...(lexerRaw === Lexer.Span && { lexer: Lexer.Span }),
   }
 
-  if (values['output']) {
-    writeFileSync(values['output'], output, 'utf-8')
+  if (values['ast-only']) {
+    const ast = format === 'abnf' ? ABNFParser.parse(source) : EBNFParser.parse(source)
+    process.stdout.write(JSON.stringify(ast, null, 2))
+    return
+  }
+
+  const outdir = values['outdir']
+  if (outdir) {
+    let files: Record<string, string>
+    try {
+      files = generateScaffoldFiles(source, flags, generatorOptions)
+    } catch (e) {
+      console.error(`rdp-gen: ${e instanceof Error ? e.message : String(e)}`)
+      process.exit(1)
+    }
+    mkdirSync(outdir, { recursive: true })
+    for (const [filename, content] of Object.entries(files)) {
+      const filePath = join(outdir, filename)
+      writeFileSync(filePath, content, 'utf-8')
+      console.error(`rdp-gen: wrote ${filePath}`)
+    }
   } else {
+    let output: string
+    try {
+      output = generateScaffold(source, flags, generatorOptions)
+    } catch (e) {
+      console.error(`rdp-gen: ${e instanceof Error ? e.message : String(e)}`)
+      process.exit(1)
+    }
     process.stdout.write(output)
   }
 }
@@ -279,13 +281,12 @@ function printGenerateHelp(): void {
 Usage: rdp-gen <grammar> [options]
 
 Generate a TypeScript parser from an EBNF or ABNF grammar file.
-Passing any scaffold flag emits a one-time starter file instead of the parser.
 
 Arguments:
   <grammar>                      path to grammar file (.ebnf or .abnf)
 
 Options:
-  -o, --output <file>            write output to file instead of stdout
+  -o, --outdir <dir>             write output files to directory (each artifact gets a derived name)
   --format <fmt>                 grammar format: ebnf or abnf (default: inferred from extension)
   --parser-name <name>           class name for the generated parser (default: GeneratedParser)
   --tree-name <name>             type name for the generated parse tree (default: ParseTree)
@@ -298,16 +299,19 @@ Options:
   -v, --version                  print version number
   -h, --help                     show this help
 
-Scaffold flags (any combination switches to scaffold mode):
-  --traversal <strategy>         emit a traversal scaffold
-                                   interpreter    one typed eval function per rule
-                                   tree-walker    walk() utility + visitor stubs
+Traversal flags (add stubs to the generated parser; file can still be regenerated):
+  --traversal <strategy>         mix traversal stubs into the parser class
+                                   interpreter    implements InterpreterMixin; one eval stub per rule
+                                   tree-walker    exports walk() alongside childNodes()
+
+Scaffold flags (any combination emits a one-time starter file instead of the parser):
   --transformer [json]           emit a Transformer scaffold
                                    (no value)     Transformer<ParseTree, T> with stubs per rule
                                    json           two-way stubs: ParseTree→JSONAST and JSONAST→string
   --facade                       wrap the scaffold in a module-as-facade (requires --traversal)
-  --pipeline                     emit parse/validate/transform stages (requires --traversal tree-walker,
-                                   or --traversal interpreter combined with --facade)
+  --pipeline                     emit parse/validate/transform stages (requires --traversal tree-walker)
+
+  --traversal combined with any scaffold flag moves the traversal strategy inside the scaffold.
 
 Commands:
   init [options]                 scaffold a new parser project (run rdp-gen init --help)`)

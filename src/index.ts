@@ -70,6 +70,41 @@ export function visit<Union extends { kind: string }, T>(
   return fn?.(node)
 }
 
+// ── Mixin types ────────────────────────────────────────────────────────────────
+
+/**
+ * Structural type for a parser class that evaluates the parse tree inline.
+ *
+ * A class `implements InterpreterMixin<ParseTree, TResult>` must define one
+ * method per grammar rule: `evalXxx(node: XxxNode): TResult`. TypeScript
+ * enforces exhaustiveness at compile time — adding a grammar rule without
+ * adding the corresponding `eval` method is a type error.
+ *
+ * Rule names are PascalCased: a rule named `binaryExpr` produces `evalBinaryExpr`.
+ *
+ * @template TTree   - The discriminated union of parse-tree node types.
+ * @template TResult - The concrete evaluation result type (use `unknown` as a placeholder).
+ */
+export type InterpreterMixin<TTree extends { kind: string }, TResult> = {
+  [K in TTree['kind'] as `eval${Capitalize<string & K>}`]: (
+    node: Extract<TTree, { kind: K }>,
+  ) => TResult
+}
+
+/**
+ * Module-shape type for a module that exports `childNodes()` and `walk()` over
+ * a grammar's parse tree.
+ *
+ * The generated parser module satisfies this type when `--traversal tree-walker`
+ * is used. Import and re-export from your application code as needed.
+ *
+ * @template TTree - The discriminated union of parse-tree node types.
+ */
+export type WalkerMixin<TTree extends { kind: string }> = {
+  childNodes(node: TTree): TTree[]
+  walk(node: TTree, visitor: Visitor<TTree, void>): void
+}
+
 // ── Transformer ────────────────────────────────────────────────────────────────
 
 /**

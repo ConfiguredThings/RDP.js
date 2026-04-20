@@ -1,103 +1,100 @@
 import { generateScaffold, generateInitScaffold } from '../../generator/scaffold.js'
 import { generateParser } from '../../generator/codegen.js'
-import { importScaffold } from '../../__testUtils__/generator-runtime.js'
+import { importScaffold, compileAndImport } from '../../__testUtils__/generator-runtime.js'
 const DATE_GRAMMAR = `Date = Year, '-', Month, '-', Day;\nYear = Digit, Digit, Digit, Digit;\nMonth = Digit, Digit;\nDay = Digit, Digit;\nDigit = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9';`
 const PARSER_NAME = 'DateParser'
 
 // ── Error cases ───────────────────────────────────────────────────────────────
 
 describe('generateScaffold — error cases', () => {
-  it('throws when no scaffold flags are provided', () => {
-    expect(() => generateScaffold(DATE_GRAMMAR, {}, { parserName: PARSER_NAME })).toThrow(
-      /At least one of --traversal, --transformer, or --lexer must be provided/,
-    )
+  it('delegates to generateParser when no scaffold flags are provided', () => {
+    const direct = generateParser(DATE_GRAMMAR, { parserName: PARSER_NAME })
+    const via = generateScaffold(DATE_GRAMMAR, {}, { parserName: PARSER_NAME })
+    expect(via).toBe(direct)
   })
 
-  it('throws when --traversal interpreter is combined with --pipeline without --facade', () => {
+  it('throws when --traversal interpreter is combined with --pipeline (with or without --facade)', () => {
+    const msg = /--traversal interpreter cannot be combined with --pipeline/
     expect(() =>
       generateScaffold(
         DATE_GRAMMAR,
         { traversal: 'interpreter', pipeline: true },
         { parserName: PARSER_NAME },
       ),
-    ).toThrow(/--traversal interpreter cannot be combined with --pipeline without --facade/)
+    ).toThrow(msg)
+    expect(() =>
+      generateScaffold(
+        DATE_GRAMMAR,
+        { traversal: 'interpreter', pipeline: true, facade: true },
+        { parserName: PARSER_NAME },
+      ),
+    ).toThrow(msg)
+  })
+
+  it('throws when --traversal and --transformer are both provided (interpreter + standard)', () => {
+    expect(() =>
+      generateScaffold(
+        DATE_GRAMMAR,
+        { traversal: 'interpreter', transformer: 'standard' },
+        { parserName: PARSER_NAME },
+      ),
+    ).toThrow(/--traversal and --transformer are mutually exclusive/)
+  })
+
+  it('throws when --traversal and --transformer are both provided (interpreter + json)', () => {
+    expect(() =>
+      generateScaffold(
+        DATE_GRAMMAR,
+        { traversal: 'interpreter', transformer: 'json' },
+        { parserName: PARSER_NAME },
+      ),
+    ).toThrow(/--traversal and --transformer are mutually exclusive/)
+  })
+
+  it('throws when --traversal and --transformer are both provided (tree-walker + standard)', () => {
+    expect(() =>
+      generateScaffold(
+        DATE_GRAMMAR,
+        { traversal: 'tree-walker', transformer: 'standard' },
+        { parserName: PARSER_NAME },
+      ),
+    ).toThrow(/--traversal and --transformer are mutually exclusive/)
+  })
+
+  it('throws when --traversal and --transformer are both provided (tree-walker + json)', () => {
+    expect(() =>
+      generateScaffold(
+        DATE_GRAMMAR,
+        { traversal: 'tree-walker', transformer: 'json' },
+        { parserName: PARSER_NAME },
+      ),
+    ).toThrow(/--traversal and --transformer are mutually exclusive/)
   })
 })
 
-// ── Evaluator scaffold ────────────────────────────────────────────────────────
+// ── Standalone traversal routes through generateParser via generateScaffold ───
 
-describe('generateScaffold — interpreter', () => {
-  let output: string
-
-  beforeAll(() => {
-    output = generateScaffold(
+describe('generateScaffold — standalone traversal delegates to generateParser', () => {
+  it('interpreter: emits implements InterpreterMixin and eval stubs in the parser class', () => {
+    const output = generateScaffold(
       DATE_GRAMMAR,
       { traversal: 'interpreter' },
       { parserName: PARSER_NAME },
     )
+    expect(output).toContain('implements InterpreterMixin<ParseTree, unknown>')
+    expect(output).toContain('evalDate(node: DateNode): unknown')
+    expect(output).toContain('static evaluate(input: string): unknown')
   })
 
-  it('imports the parser class and every node type', () => {
-    expect(output).toContain(`import {`)
-    expect(output).toContain(`  ${PARSER_NAME},`)
-    expect(output).toContain(`  type DateNode,`)
-    expect(output).toContain(`  type YearNode,`)
-    expect(output).toContain(`  type DigitNode,`)
-    expect(output).toContain(`} from './${PARSER_NAME}.js'`)
-  })
-
-  it('emits an evaluate() entry point that calls the first rule', () => {
-    expect(output).toContain(`export function evaluate(input: string): unknown`)
-    expect(output).toContain(`evalDate(${PARSER_NAME}.parse(input))`)
-  })
-
-  it('emits one eval function per grammar rule', () => {
-    expect(output).toContain(`function evalDate(node: DateNode): unknown`)
-    expect(output).toContain(`function evalYear(node: YearNode): unknown`)
-    expect(output).toContain(`function evalMonth(node: MonthNode): unknown`)
-    expect(output).toContain(`function evalDay(node: DayNode): unknown`)
-    expect(output).toContain(`function evalDigit(node: DigitNode): unknown`)
-  })
-
-  it('wraps RDParserException in the entry point', () => {
-    expect(output).toContain(`RDParserException`)
-  })
-})
-
-// ── Walker scaffold ───────────────────────────────────────────────────────────
-
-describe('generateScaffold — tree-walker', () => {
-  let output: string
-
-  beforeAll(() => {
-    output = generateScaffold(
+  it('tree-walker: emits walk() export and visitor template in the parser file', () => {
+    const output = generateScaffold(
       DATE_GRAMMAR,
       { traversal: 'tree-walker' },
       { parserName: PARSER_NAME },
     )
-  })
-
-  it('imports childNodes and ParseTree from the parser module', () => {
-    expect(output).toContain(`childNodes`)
-    expect(output).toContain(`type ParseTree`)
-    expect(output).toContain(`'./${PARSER_NAME}.js'`)
-  })
-
-  it('imports visit and Visitor from the runtime', () => {
-    expect(output).toContain(`visit`)
-    expect(output).toContain(`type Visitor`)
-    expect(output).toContain(`'@configuredthings/rdp.js'`)
-  })
-
-  it('emits a walk() utility function', () => {
-    expect(output).toContain(`export function walk(root: ParseTree`)
+    expect(output).toContain('export function walk(root: ParseTree')
     expect(output).toContain(`for (const child of childNodes(root)) walk(child, fn)`)
-  })
-
-  it('includes a commented-out visitor stub for every rule', () => {
-    for (const rule of ['Date', 'Year', 'Month', 'Day', 'Digit']) {
-      expect(output).toContain(`'${rule}':`)
-    }
+    expect(output).toContain(`// const visitor: Visitor<ParseTree> = {`)
   })
 })
 
@@ -197,63 +194,6 @@ describe('generateScaffold — facade + tree-walker', () => {
 
   it('does not export walk', () => {
     expect(output).not.toContain(`export function walk`)
-  })
-})
-
-// ── Facade + pipeline:interpreter scaffold ──────────────────────────────────────
-
-describe('generateScaffold — facade + pipeline:interpreter', () => {
-  let output: string
-
-  beforeAll(() => {
-    output = generateScaffold(
-      DATE_GRAMMAR,
-      { traversal: 'interpreter', pipeline: true, facade: true },
-      { parserName: PARSER_NAME },
-    )
-  })
-
-  it('imports all node types (needed by private eval functions)', () => {
-    expect(output).toContain(`  type DateNode,`)
-    expect(output).toContain(`  type YearNode,`)
-    expect(output).toContain(`  type DigitNode,`)
-  })
-
-  it('emits a DateResult class with static from()', () => {
-    expect(output).toContain(`export class DateResult`)
-    expect(output).toContain(`static from(tree: DateNode): DateResult`)
-  })
-
-  it('emits a DateError class', () => {
-    expect(output).toContain(`export class DateError extends Error`)
-  })
-
-  it('emits a parseDate() entry function that delegates to DatePipeline.run()', () => {
-    expect(output).toContain(`export function parseDate(input: string): DateResult`)
-    expect(output).toContain(`DatePipeline.run(input)`)
-  })
-
-  it('emits a private DatePipeline class with static private stages', () => {
-    expect(output).toContain(`class DatePipeline`)
-    expect(output).toContain(`static run(input: string): DateResult`)
-    expect(output).toContain(`static #parse(input: string): DateNode`)
-    expect(output).toContain(`static #validate(`)
-    expect(output).toContain(`static #transform(tree: DateNode): DateResult`)
-  })
-
-  it('#validate returns a discriminated union with no errors array', () => {
-    expect(output).toContain(`ok: true; tree: DateNode`)
-    expect(output).toContain(`ok: false }`)
-    expect(output).not.toContain(`errors: ValidationError`)
-  })
-
-  it('pipeline throws DateError on parse failure', () => {
-    expect(output).toContain(`throw new DateError(input)`)
-  })
-
-  it('emits private eval functions for every rule', () => {
-    expect(output).toContain(`function evalDate(node: DateNode): unknown`)
-    expect(output).toContain(`function evalYear(node: YearNode): unknown`)
   })
 })
 
@@ -368,21 +308,18 @@ describe('interpreter scaffold — runtime', () => {
   let evaluate: (input: string) => unknown
 
   beforeAll(async () => {
-    const parserSource = generateParser(DATE_GRAMMAR, { parserName: PARSER_NAME })
-    const scaffoldSource = generateScaffold(
+    const source = generateScaffold(
       DATE_GRAMMAR,
       { traversal: 'interpreter' },
-      {
-        parserName: PARSER_NAME,
-      },
+      { parserName: PARSER_NAME },
     )
-    const { scaffold } = await importScaffold(scaffoldSource, parserSource, PARSER_NAME)
-    evaluate = scaffold['evaluate'] as (input: string) => unknown
+    const mod = await compileAndImport(source)
+    const cls = mod[PARSER_NAME] as { evaluate: (input: string) => unknown }
+    evaluate = cls.evaluate.bind(cls)
   })
 
-  it('wraps a parse failure in a plain Error (not RDParserException)', () => {
-    expect(() => evaluate('not-a-date')).toThrow(Error)
-    expect(() => evaluate('not-a-date')).not.toThrow('RDParserException')
+  it('evaluates by calling DateParser.parse() internally', () => {
+    expect(() => evaluate('not-a-date')).toThrow()
   })
 
   it('reaches the not-implemented stub on valid input', () => {
@@ -397,17 +334,15 @@ describe('tree-walker scaffold — runtime', () => {
   let DateParser: { parse(s: string): { kind: string } }
 
   beforeAll(async () => {
-    const parserSource = generateParser(DATE_GRAMMAR, { parserName: PARSER_NAME })
-    const scaffoldSource = generateScaffold(
+    // walk() is now exported directly from the parser file (traversal mixin)
+    const source = generateScaffold(
       DATE_GRAMMAR,
       { traversal: 'tree-walker' },
-      {
-        parserName: PARSER_NAME,
-      },
+      { parserName: PARSER_NAME },
     )
-    const { scaffold, parser } = await importScaffold(scaffoldSource, parserSource, PARSER_NAME)
-    walk = scaffold['walk'] as typeof walk
-    DateParser = parser[PARSER_NAME] as typeof DateParser
+    const mod = await compileAndImport(source)
+    walk = mod['walk'] as typeof walk
+    DateParser = mod[PARSER_NAME] as typeof DateParser
   })
 
   it('walk() visits every non-terminal node in "2024-01-15"', () => {
@@ -486,33 +421,6 @@ describe('facade + tree-walker scaffold — runtime', () => {
   })
 
   it('reaches the not-implemented from() stub on valid input', () => {
-    expect(() => parseDate('2024-01-15')).toThrow('not implemented')
-  })
-})
-
-// ── Scaffold runtime — facade + pipeline:interpreter ────────────────────────────
-
-describe('facade + pipeline:interpreter scaffold — runtime', () => {
-  let parseDate: (input: string) => unknown
-  let DateError: new (input: string) => Error
-
-  beforeAll(async () => {
-    const parserSource = generateParser(DATE_GRAMMAR, { parserName: PARSER_NAME })
-    const scaffoldSource = generateScaffold(
-      DATE_GRAMMAR,
-      { traversal: 'interpreter', pipeline: true, facade: true },
-      { parserName: PARSER_NAME },
-    )
-    const { scaffold } = await importScaffold(scaffoldSource, parserSource, PARSER_NAME)
-    parseDate = scaffold['parseDate'] as (input: string) => unknown
-    DateError = scaffold['DateError'] as new (input: string) => Error
-  })
-
-  it('throws DateError on invalid input (from #parse stage)', () => {
-    expect(() => parseDate('not-a-date')).toThrow(DateError)
-  })
-
-  it('reaches not-implemented on valid input (from #transform)', () => {
     expect(() => parseDate('2024-01-15')).toThrow('not implemented')
   })
 })
@@ -732,6 +640,161 @@ describe('json-transformer scaffold — runtime', () => {
 
   it('jsonStringToDate() reaches the not-implemented stub on valid JSON', () => {
     expect(() => jsonStringToDate('"2024-01-15"')).toThrow('not implemented')
+  })
+})
+
+// ── Span-lexer scaffold (standalone) ─────────────────────────────────────────
+
+describe('generateScaffold — span-lexer (standalone)', () => {
+  let output: string
+
+  beforeAll(() => {
+    output = generateScaffold(DATE_GRAMMAR, { lexer: 'span' }, { parserName: PARSER_NAME })
+  })
+
+  it('emits a TokenRDParser subclass named after parserName', () => {
+    expect(output).toContain(`export class ${PARSER_NAME} extends TokenRDParser`)
+  })
+
+  it('emits a TT token-type constant with NAME, INT, EOF entries', () => {
+    expect(output).toContain(`export const TT = {`)
+    expect(output).toContain(`NAME:`)
+    expect(output).toContain(`INT:`)
+    expect(output).toContain(`EOF:`)
+  })
+
+  it('emits a MINUS punctuation token for the "-" terminal in the grammar', () => {
+    expect(output).toContain(`MINUS:`)
+  })
+
+  it('emits a spanTokenize() function', () => {
+    expect(output).toContain(`export function spanTokenize(input: string): SpanBuffer`)
+  })
+
+  it('emits a classify() function', () => {
+    expect(output).toContain(`export function classify(input: string,`)
+  })
+
+  it('emits a #parse<Rule> stub for every grammar rule', () => {
+    for (const rule of ['Date', 'Year', 'Month', 'Day', 'Digit']) {
+      expect(output).toContain(`#parse${rule}(): unknown`)
+    }
+  })
+
+  it('emits parse-tree type declarations', () => {
+    expect(output).toContain(`export type DateNode =`)
+    expect(output).toContain(`export type ParseTree =`)
+  })
+
+  it('does not contain any planScaffold patterns', () => {
+    expect(output).not.toContain(`export function evaluate(`)
+    expect(output).not.toContain(`Transformer<`)
+    expect(output).not.toContain(`export class DateResult`)
+  })
+})
+
+// ── Span-lexer combined with other scaffold flags ─────────────────────────────
+//
+// --lexer span is orthogonal to facade / pipeline / transformer combinations.
+// Standalone traversal (no facade/pipeline) now routes through generateParser,
+// so generateScaffold throws for span + standalone traversal too. The facade/
+// pipeline combinations still produce lexer-agnostic scaffolds identical to
+// the same flags without --lexer span.
+
+describe('generateScaffold — lexer:span combined with other flags', () => {
+  const opts = { parserName: PARSER_NAME }
+  const treeOpts = { parserName: PARSER_NAME, treeName: 'ParseTree' }
+
+  it('span + interpreter (standalone) equals interpreter alone', () => {
+    expect(generateScaffold(DATE_GRAMMAR, { lexer: 'span', traversal: 'interpreter' }, opts)).toBe(
+      generateScaffold(DATE_GRAMMAR, { traversal: 'interpreter' }, opts),
+    )
+  })
+
+  it('span + tree-walker (standalone) equals tree-walker alone', () => {
+    expect(generateScaffold(DATE_GRAMMAR, { lexer: 'span', traversal: 'tree-walker' }, opts)).toBe(
+      generateScaffold(DATE_GRAMMAR, { traversal: 'tree-walker' }, opts),
+    )
+  })
+
+  it('span + facade + interpreter equals facade+interpreter', () => {
+    expect(
+      generateScaffold(
+        DATE_GRAMMAR,
+        { lexer: 'span', traversal: 'interpreter', facade: true },
+        opts,
+      ),
+    ).toBe(generateScaffold(DATE_GRAMMAR, { traversal: 'interpreter', facade: true }, opts))
+  })
+
+  it('span + facade + tree-walker equals facade+tree-walker', () => {
+    expect(
+      generateScaffold(
+        DATE_GRAMMAR,
+        { lexer: 'span', traversal: 'tree-walker', facade: true },
+        opts,
+      ),
+    ).toBe(generateScaffold(DATE_GRAMMAR, { traversal: 'tree-walker', facade: true }, opts))
+  })
+
+  it('span + facade + pipeline + tree-walker equals facade+pipeline+tree-walker', () => {
+    expect(
+      generateScaffold(
+        DATE_GRAMMAR,
+        { lexer: 'span', traversal: 'tree-walker', facade: true, pipeline: true },
+        treeOpts,
+      ),
+    ).toBe(
+      generateScaffold(
+        DATE_GRAMMAR,
+        { traversal: 'tree-walker', facade: true, pipeline: true },
+        treeOpts,
+      ),
+    )
+  })
+
+  it('span + pipeline + tree-walker equals pipeline+tree-walker', () => {
+    expect(
+      generateScaffold(
+        DATE_GRAMMAR,
+        { lexer: 'span', traversal: 'tree-walker', pipeline: true },
+        treeOpts,
+      ),
+    ).toBe(generateScaffold(DATE_GRAMMAR, { traversal: 'tree-walker', pipeline: true }, treeOpts))
+  })
+
+  it('span + standard transformer equals standard-transformer alone', () => {
+    expect(generateScaffold(DATE_GRAMMAR, { lexer: 'span', transformer: 'standard' }, opts)).toBe(
+      generateScaffold(DATE_GRAMMAR, { transformer: 'standard' }, opts),
+    )
+  })
+
+  it('span + json transformer equals json-transformer alone', () => {
+    expect(generateScaffold(DATE_GRAMMAR, { lexer: 'span', transformer: 'json' }, opts)).toBe(
+      generateScaffold(DATE_GRAMMAR, { transformer: 'json' }, opts),
+    )
+  })
+
+  it('span + json + facade + pipeline equals json+facade+pipeline', () => {
+    expect(
+      generateScaffold(
+        DATE_GRAMMAR,
+        { lexer: 'span', transformer: 'json', facade: true, pipeline: true },
+        opts,
+      ),
+    ).toBe(
+      generateScaffold(DATE_GRAMMAR, { transformer: 'json', facade: true, pipeline: true }, opts),
+    )
+  })
+
+  it('still throws for span + interpreter + pipeline', () => {
+    expect(() =>
+      generateScaffold(
+        DATE_GRAMMAR,
+        { lexer: 'span', traversal: 'interpreter', pipeline: true },
+        opts,
+      ),
+    ).toThrow(/--traversal interpreter cannot be combined with --pipeline/)
   })
 })
 

@@ -41,7 +41,7 @@ rdp-gen <grammar> [options]
 | Option | Default | Description |
 |--------|---------|-------------|
 | `<grammar>` | (required) | Path to a `.ebnf` or `.abnf` grammar file |
-| `-o, --output <file>` | stdout | Write output to a file instead of stdout |
+| `-o, --outdir <dir>` | stdout | Write output files to a directory; each artifact gets a derived filename |
 | `--format <fmt>` | inferred from extension | Force `ebnf` or `abnf` |
 | `--parser-name <name>` | `GeneratedParser` | Class name for the generated parser |
 | `--tree-name <name>` | `ParseTree` | Type name for the generated parse tree |
@@ -56,16 +56,16 @@ rdp-gen <grammar> [options]
 
 #### Examples
 
-Generate a parser to a file:
+Generate a parser to a directory (writes `src/JsonParser.ts`):
 
 ```bash
-rdp-gen grammar.ebnf --parser-name JsonParser --output src/JsonParser.ts
+rdp-gen grammar.ebnf --parser-name JsonParser --outdir src/
 ```
 
 Generate with tracing support:
 
 ```bash
-rdp-gen grammar.ebnf --parser-name MyParser --observable --output src/MyParser.ts
+rdp-gen grammar.ebnf --parser-name MyParser --observable --outdir src/
 ```
 
 Parse an ABNF grammar and write to stdout:
@@ -76,9 +76,31 @@ rdp-gen protocol.abnf --format abnf --parser-name FrameParser
 
 ---
 
+### Traversal stubs (`--traversal`)
+
+When used alone (without `--facade`, `--pipeline`, or `--transformer`), `--traversal`
+adds evaluation scaffolding **directly to the generated parser file** — the output is
+still a parser, not a separate scaffold. Because the stubs follow the grammar
+mechanically, the file can be **regenerated** as the grammar evolves.
+
+| Flags | What it adds to the parser |
+|---|---|
+| `--traversal interpreter` | Parser class implements `InterpreterMixin<ParseTree, unknown>` — one `eval{Rule}(node): unknown` stub per rule and a `static evaluate()` entry point |
+| `--traversal tree-walker` | Exports a `walk(root, fn)` function alongside the existing `childNodes()` helper; includes a commented-out `Visitor` template covering every rule |
+
+```bash
+# Generate (or regenerate) a parser with interpreter stubs baked in (writes src/DateParser.ts)
+rdp-gen date.ebnf --parser-name DateParser --traversal interpreter --outdir src/
+```
+
+When `--traversal` is combined with `--facade`, `--pipeline`, or `--transformer`, the
+traversal strategy moves _inside_ the scaffold — see [Scaffolding](#scaffolding) below.
+
+---
+
 ### Scaffolding
 
-When any of `--traversal`, `--transformer`, `--facade`, `--pipeline`, or `--lexer` is
+When any of `--transformer`, `--facade`, `--pipeline`, or `--lexer span` is
 present, `rdp-gen` emits a **scaffold** rather than a parser. A scaffold is a
 **one-time starter file** — unlike the generated parser it is not designed to be
 regenerated. It imports the parser by a relative path, wires up the chosen pattern,
@@ -89,21 +111,17 @@ a real grammar.
 
 | Flags | What it emits |
 |---|---|
-| `--traversal interpreter` | One typed `eval{Rule}()` function per rule, `evaluate()` entry, `RDParserException` wrapping |
-| `--traversal tree-walker` | `walk()` utility using `childNodes`, commented `Visitor` stub for every rule |
 | `--traversal interpreter --facade` | Module-as-facade: `parse{Base}()`, `{Base}Result` class with `from()`, private eval functions |
 | `--traversal tree-walker --facade` | Module-as-facade: `parse{Base}()`, `{Base}Result` class, private walk utility and visitor stubs |
 | `--traversal tree-walker --pipeline` | Exported `parse`/`validate`/`transform` + `load{Base}()` combinator; tree-walker inside `transform` |
-| `--traversal interpreter --pipeline --facade` | Module-as-facade wrapping a pipeline; eval inside `#transform` |
-| `--traversal tree-walker --pipeline --facade` | As above but `#transform` uses a tree walker |
+| `--traversal tree-walker --pipeline --facade` | Module-as-facade wrapping a pipeline with a tree walker inside `#transform` |
 | `--transformer` | Exported `Transformer<ParseTree, unknown>` object with a stub per rule + entry function |
 | `--transformer json` | Two-way stubs: `{Base}ToJSON: Transformer<ParseTree, JSONAST>` and `jsonTo{Base}: Transformer<JSONAST, string>` plus round-trip helpers |
 | `--lexer span` | Span tokeniser + classifier + `{Base}TokenParser` stubs (see [Tokenising for performance](/docs/tokenising/)) |
-| `--lexer span --traversal interpreter` | As above but `{Base}TokenParser` evaluates directly during descent — no intermediate tree |
 
 #### Flag compatibility
 
-The scaffold flags are designed to compose. The table below shows which combinations are valid (`✓`), invalid (`✗`), or not applicable (`—`). The one constraint is that `--traversal interpreter` cannot be combined with `--pipeline` unless `--facade` is also set (the facade wraps a private pipeline whose `#transform` uses the interpreter, so an intermediate tree is still produced).
+The scaffold flags are designed to compose. The table below shows which combinations are valid (`✓`), invalid (`✗`), or not applicable (`—`). The one constraint is that `--traversal interpreter` cannot be combined with `--pipeline` — the interpreter evaluates directly during traversal, leaving no intermediate tree for the validate stage.
 
 | | `--facade` | `--pipeline` | `--transformer [json]` |
 |---|:---:|:---:|:---:|
@@ -113,37 +131,46 @@ The scaffold flags are designed to compose. The table below shows which combinat
 | `--facade` | — | ✓ | ✓ |
 | `--transformer [json]` | ✓ | — | — |
 
-`--lexer span` is compatible with any of the above combinations (pass it alongside `--traversal interpreter` to wire evaluation directly into the token parser).
+`--lexer span` is compatible with any of the above combinations.
+
+When `--transformer json` is combined with `--facade` (with or without `--pipeline`),
+`--outdir` produces **separate files** for each concern so the facade is a genuine module boundary:
+
+```bash
+# Writes: src/SISLParser.ts, src/sisl-transformer.ts, src/sisl-pipeline.ts, src/sisl-facade.ts
+rdp-gen sisl.abnf --parser-name SISLParser --transformer json --facade --pipeline --lexer span --outdir src/
+```
 
 The typical workflow for a new grammar:
 
 ```bash
-# 1. Generate the parser (regenerate freely as the grammar evolves)
-rdp-gen date.ebnf --parser-name DateParser --output src/DateParser.ts
+# 1. Generate the parser (regenerate freely as the grammar evolves) → src/DateParser.ts
+rdp-gen date.ebnf --parser-name DateParser --outdir src/
 
-# 2. Generate a scaffold once (edit this file; do not regenerate)
-rdp-gen date.ebnf --parser-name DateParser --traversal interpreter --facade --output src/date.ts
+# 2. Generate a scaffold once (edit; do not regenerate) → src/date-facade.ts
+rdp-gen date.ebnf --parser-name DateParser --traversal interpreter --facade --outdir src/
 ```
 
-The scaffold imports the parser by a relative path (`'./DateParser.js'`), so keep
-both files in the same directory.
+Both files land in the same directory, so the scaffold's import of `'./DateParser.js'` resolves correctly.
 
-#### Interpreter scaffold
+#### Interpreter traversal stubs
 
-Emits one `eval{Rule}(node: {Rule}Node): unknown` function per rule, an `evaluate()`
-entry point that calls the first rule, and wraps `RDParserException` in a plain `Error`:
+Adds `InterpreterMixin<ParseTree, unknown>` to the parser class, emitting one
+`eval{Rule}(node: {Rule}Node): unknown` stub per rule and a `static evaluate()` entry
+point. The file header notes that stubs are present and safe to edit; the parser
+structure itself can still be regenerated:
 
 ```bash
-rdp-gen date.ebnf --parser-name DateParser --traversal interpreter --output src/date-eval.ts
+rdp-gen date.ebnf --parser-name DateParser --traversal interpreter --outdir src/
 ```
 
-#### Tree-walker scaffold
+#### Tree-walker stubs
 
-Emits a `walk(root, fn)` utility using `childNodes` (always present in the generated
-parser), plus a commented-out `Visitor` stub covering every rule in the grammar:
+Exports a `walk(root, fn)` function alongside the existing `childNodes()` helper,
+plus a commented-out `Visitor` template covering every rule in the grammar:
 
 ```bash
-rdp-gen date.ebnf --parser-name DateParser --traversal tree-walker --output src/date-walker.ts
+rdp-gen date.ebnf --parser-name DateParser --traversal tree-walker --outdir src/
 ```
 
 #### Facade scaffold
@@ -153,17 +180,14 @@ class with a `static from(tree)` factory, and a `{Base}Error` class. Combine wit
 `--traversal` to specify the strategy used inside the facade:
 
 ```bash
-# Facade wrapping recursive interpreter functions
-rdp-gen date.ebnf --parser-name DateParser --traversal interpreter --facade --output src/date.ts
+# Facade wrapping recursive interpreter functions → src/date-facade.ts
+rdp-gen date.ebnf --parser-name DateParser --traversal interpreter --facade --outdir src/
 
-# Facade wrapping a tree walker
-rdp-gen date.ebnf --parser-name DateParser --traversal tree-walker --facade --output src/date.ts
+# Facade wrapping a tree walker → src/date-facade.ts
+rdp-gen date.ebnf --parser-name DateParser --traversal tree-walker --facade --outdir src/
 
-# Facade wrapping a full pipeline (interpreter inside #transform)
-rdp-gen date.ebnf --parser-name DateParser --traversal interpreter --pipeline --facade --output src/date.ts
-
-# Facade wrapping a full pipeline (tree walker inside #transform)
-rdp-gen date.ebnf --parser-name DateParser --traversal tree-walker --pipeline --facade --output src/date.ts
+# Facade wrapping a full pipeline (tree walker inside #transform) → src/date-facade.ts
+rdp-gen date.ebnf --parser-name DateParser --traversal tree-walker --pipeline --facade --outdir src/
 ```
 
 #### Pipeline scaffold
@@ -175,8 +199,8 @@ inside `transform`. Note that `--traversal interpreter` is not compatible with `
 (see [flag compatibility](#flag-compatibility) above):
 
 ```bash
-# Pipeline with tree walker inside transform
-rdp-gen date.ebnf --parser-name DateParser --traversal tree-walker --pipeline --output src/date-pipeline.ts
+# Pipeline with tree walker inside transform → src/date-pipeline.ts
+rdp-gen date.ebnf --parser-name DateParser --traversal tree-walker --pipeline --outdir src/
 ```
 
 #### Transformer scaffold
@@ -187,7 +211,7 @@ concrete return type, then fill in the handlers. Because `Transformer` requires 
 adding a new rule to the grammar will immediately cause a compile error in the scaffold:
 
 ```bash
-rdp-gen date.ebnf --parser-name DateParser --transformer --output src/date-transformer.ts
+rdp-gen date.ebnf --parser-name DateParser --transformer --outdir src/
 ```
 
 See [`Transformer<ParseTree, T>` and `transform()`](/docs/parse-tree/#transformer-parsetree-t-and-transform)
@@ -200,10 +224,10 @@ functions. This is the recommended starting point when JSON is one endpoint of y
 translation:
 
 ```bash
-rdp-gen date.ebnf --parser-name DateParser --transformer json --output src/date-json.ts
+rdp-gen date.ebnf --parser-name DateParser --transformer json --outdir src/
 ```
 
-The generated file contains:
+Writes `src/date-transformer.ts` containing:
 - `dateToJSON: Transformer<ParseTree, JSONAST>` — one stub per grammar rule
 - `jsonToDate: Transformer<JSONAST, string>` — one stub per JSON kind (`string`, `number`, `boolean`, `null`, `array`, `object`)
 - `dateToJSONString(input: string): string` — parses the input and calls `fromJSONAST`
