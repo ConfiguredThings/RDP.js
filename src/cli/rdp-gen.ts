@@ -10,24 +10,9 @@ import { parseArgs } from 'node:util'
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { generateParser, generateScaffold, generateInitScaffold } from '../generator/index.js'
-import type { ScaffoldPattern, ScaffoldInner } from '../generator/index.js'
+import type { ScaffoldFlags } from '../generator/index.js'
 import { EBNFParser } from '../generator/ebnf-parser.js'
 import { ABNFParser } from '../generator/abnf-parser.js'
-
-const SCAFFOLD_PATTERNS: ScaffoldPattern[] = [
-  'interpreter',
-  'facade',
-  'pipeline',
-  'tree-walker',
-  'transformer',
-  'json-transformer',
-]
-const SCAFFOLD_INNER_VALUES: ScaffoldInner[] = [
-  'interpreter',
-  'tree-walker',
-  'pipeline:interpreter',
-  'pipeline:tree-walker',
-]
 
 const require = createRequire(import.meta.url)
 const { version } = require('../../../package.json') as { version: string }
@@ -45,6 +30,35 @@ if (args[0] === 'init') {
   runGenerate(args)
 }
 
+// ── Helpers ────────────────────────────────────────────────────────────────────
+
+/**
+ * Normalise `--transformer [json]` before passing to parseArgs.
+ *
+ * Node's parseArgs requires a value for string-type options. `--transformer`
+ * with no following value becomes `--transformer=standard`; `--transformer json`
+ * becomes `--transformer=json`.
+ */
+function normalizeTransformerArg(args: string[]): string[] {
+  const result: string[] = []
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i]
+    if (arg === undefined) continue
+    if (arg === '--transformer') {
+      const next = args[i + 1]
+      if (next === 'json') {
+        result.push('--transformer=json')
+        i++
+      } else {
+        result.push('--transformer=standard')
+      }
+    } else {
+      result.push(arg)
+    }
+  }
+  return result
+}
+
 // ── rdp-gen <grammar> ──────────────────────────────────────────────────────────
 
 function runGenerate(rawArgs: string[]): void {
@@ -53,17 +67,24 @@ function runGenerate(rawArgs: string[]): void {
     process.exit(rawArgs.length === 0 ? 1 : 0)
   }
 
+  // Pre-process args: --transformer [json] — Node's parseArgs requires a value for string
+  // options, so we normalise '--transformer' (without value) to '--transformer=standard' before
+  // passing to parseArgs.
+  const normArgs = normalizeTransformerArg(rawArgs)
+
   const { values, positionals } = parseArgs({
-    args: rawArgs,
+    args: normArgs,
     options: {
       output: { type: 'string', short: 'o' },
       format: { type: 'string' },
       'parser-name': { type: 'string' },
       'tree-name': { type: 'string' },
       observable: { type: 'boolean' },
-      walker: { type: 'boolean' },
-      scaffold: { type: 'string' },
-      inner: { type: 'string' },
+      traversal: { type: 'string' },
+      transformer: { type: 'string' },
+      facade: { type: 'boolean' },
+      pipeline: { type: 'boolean' },
+      lexer: { type: 'string' },
       'ast-only': { type: 'boolean' },
       'abnf-case-sensitive-strings': { type: 'boolean' },
     },
@@ -98,60 +119,75 @@ function runGenerate(rawArgs: string[]): void {
     }),
   }
 
+  // ── Validate scaffold flag values ──────────────────────────────────────────
+  const traversalRaw = values['traversal']
+  if (
+    traversalRaw !== undefined &&
+    traversalRaw !== 'interpreter' &&
+    traversalRaw !== 'tree-walker'
+  ) {
+    console.error(
+      `rdp-gen: unknown --traversal value "${traversalRaw}". Valid values: interpreter, tree-walker`,
+    )
+    process.exit(1)
+  }
+
+  const transformerRaw = values['transformer']
+  if (transformerRaw !== undefined && transformerRaw !== 'standard' && transformerRaw !== 'json') {
+    console.error(
+      `rdp-gen: unknown --transformer value "${transformerRaw}". Pass --transformer or --transformer json`,
+    )
+    process.exit(1)
+  }
+
+  const lexerRaw = values['lexer']
+  if (lexerRaw !== undefined && lexerRaw !== 'scannerless' && lexerRaw !== 'span') {
+    console.error(
+      `rdp-gen: unknown --lexer value "${lexerRaw}". Valid values: scannerless (default), span`,
+    )
+    process.exit(1)
+  }
+
+  const isScaffoldMode =
+    traversalRaw !== undefined ||
+    transformerRaw !== undefined ||
+    values['facade'] === true ||
+    values['pipeline'] === true
+
   let output: string
   if (values['ast-only']) {
     const ast = format === 'abnf' ? ABNFParser.parse(source) : EBNFParser.parse(source)
     output = JSON.stringify(ast, null, 2)
-  } else if (values['scaffold']) {
-    const pattern = values['scaffold']
-    if (!SCAFFOLD_PATTERNS.includes(pattern as ScaffoldPattern)) {
-      console.error(
-        `rdp-gen: unknown scaffold pattern "${pattern}". Valid patterns: ${SCAFFOLD_PATTERNS.join(', ')}`,
-      )
+  } else if (lexerRaw === 'span') {
+    // Span-lexer path — independent of scaffold mode; --traversal interpreter optionally
+    // wires evaluation directly into the TokenParser methods.
+    const flags: ScaffoldFlags = {
+      lexer: 'span',
+      ...(traversalRaw === 'interpreter' && { traversal: 'interpreter' }),
+    }
+    try {
+      output = generateScaffold(source, flags, generatorOptions)
+    } catch (e) {
+      console.error(`rdp-gen: ${e instanceof Error ? e.message : String(e)}`)
       process.exit(1)
     }
-
-    const innerRaw = values['inner']
-    if (innerRaw !== undefined && !SCAFFOLD_INNER_VALUES.includes(innerRaw as ScaffoldInner)) {
-      console.error(
-        `rdp-gen: unknown --inner value "${innerRaw}". Valid values: ${SCAFFOLD_INNER_VALUES.join(', ')}`,
-      )
+  } else if (isScaffoldMode) {
+    const flags: ScaffoldFlags = {
+      ...(traversalRaw !== undefined && {
+        traversal: traversalRaw as 'interpreter' | 'tree-walker',
+      }),
+      ...(transformerRaw !== undefined && {
+        transformer: transformerRaw as 'standard' | 'json',
+      }),
+      ...(values['facade'] === true && { facade: true }),
+      ...(values['pipeline'] === true && { pipeline: true }),
+    }
+    try {
+      output = generateScaffold(source, flags, generatorOptions)
+    } catch (e) {
+      console.error(`rdp-gen: ${e instanceof Error ? e.message : String(e)}`)
       process.exit(1)
     }
-
-    // Validate combinations — generateScaffold also checks, but give a cleaner CLI error.
-    if ((pattern === 'facade' || pattern === 'pipeline') && !innerRaw) {
-      const validInner =
-        pattern === 'facade'
-          ? 'interpreter, tree-walker, pipeline:interpreter, or pipeline:tree-walker'
-          : 'interpreter or tree-walker'
-      console.error(`rdp-gen: --scaffold ${pattern} requires --inner. Pass --inner ${validInner}.`)
-      process.exit(1)
-    }
-    if (
-      (pattern === 'interpreter' ||
-        pattern === 'tree-walker' ||
-        pattern === 'transformer' ||
-        pattern === 'json-transformer') &&
-      innerRaw
-    ) {
-      console.error(`rdp-gen: --inner is not applicable to --scaffold ${pattern}.`)
-      process.exit(1)
-    }
-    if (
-      pattern === 'pipeline' &&
-      (innerRaw === 'pipeline:interpreter' || innerRaw === 'pipeline:tree-walker')
-    ) {
-      console.error(
-        `rdp-gen: --scaffold pipeline does not support --inner pipeline:*. Use --inner interpreter or --inner tree-walker.`,
-      )
-      process.exit(1)
-    }
-
-    output = generateScaffold(source, pattern as ScaffoldPattern, {
-      ...generatorOptions,
-      ...(innerRaw !== undefined && { inner: innerRaw as ScaffoldInner }),
-    })
   } else {
     output = generateParser(source, generatorOptions)
   }
@@ -242,36 +278,39 @@ function printGenerateHelp(): void {
   console.log(`\
 Usage: rdp-gen <grammar> [options]
 
-Generate a TypeScript RDParser subclass from an EBNF or ABNF grammar file.
+Generate a TypeScript parser from an EBNF or ABNF grammar file.
+Passing any scaffold flag emits a one-time starter file instead of the parser.
 
 Arguments:
-  <grammar>                          path to grammar file (.ebnf or .abnf)
+  <grammar>                      path to grammar file (.ebnf or .abnf)
 
 Options:
-  -o, --output <file>                write output to file instead of stdout
-  --format <fmt>                     grammar format: ebnf or abnf (default: inferred from extension)
-  --parser-name <name>               class name for the generated parser (default: GeneratedParser)
-  --tree-name <name>                 type name for the generated parse tree (default: ParseTree)
-  --observable                       extend ObservableRDParser; adds notifyEnter/notifyExit calls
-  --scaffold <pattern>               emit a one-time usage scaffold instead of the parser
-                                     interpreter       one typed function per rule, ready to fill in
-                                     facade            module-as-facade with domain class and error type (requires --inner)
-                                     pipeline          parse / validate / transform stages (requires --inner)
-                                     tree-walker       walk() utility using childNodes with visitor stubs
-                                     transformer       exhaustive Transformer<ParseTree, T> object with stubs per rule
-                                     json-transformer  two-way Transformer stubs: ParseTree → JSONAST and JSONAST → string
-  --inner <strategy>                 inner traversal strategy for facade and pipeline scaffolds
-                                     interpreter          recursive eval functions
-                                     tree-walker          childNodes-based tree walker with visitor stubs
-                                     pipeline:interpreter pipeline class with eval inside #transform (facade only)
-                                     pipeline:tree-walker pipeline class with tree-walker inside #transform (facade only)
-  --ast-only                         emit grammar AST as JSON instead of TypeScript
-  --abnf-case-sensitive-strings      match ABNF string literals case-sensitively
-  -v, --version                      print version number
-  -h, --help                         show this help
+  -o, --output <file>            write output to file instead of stdout
+  --format <fmt>                 grammar format: ebnf or abnf (default: inferred from extension)
+  --parser-name <name>           class name for the generated parser (default: GeneratedParser)
+  --tree-name <name>             type name for the generated parse tree (default: ParseTree)
+  --observable                   extend ObservableRDParser; adds notifyEnter/notifyExit calls
+  --lexer <strategy>             lexer strategy to use (default: scannerless)
+                                   scannerless  characters → AST directly; no separate tokeniser
+                                   span         emit a span tokeniser + classifier scaffold instead
+  --ast-only                     emit grammar AST as JSON instead of TypeScript
+  --abnf-case-sensitive-strings  match ABNF string literals case-sensitively
+  -v, --version                  print version number
+  -h, --help                     show this help
+
+Scaffold flags (any combination switches to scaffold mode):
+  --traversal <strategy>         emit a traversal scaffold
+                                   interpreter    one typed eval function per rule
+                                   tree-walker    walk() utility + visitor stubs
+  --transformer [json]           emit a Transformer scaffold
+                                   (no value)     Transformer<ParseTree, T> with stubs per rule
+                                   json           two-way stubs: ParseTree→JSONAST and JSONAST→string
+  --facade                       wrap the scaffold in a module-as-facade (requires --traversal)
+  --pipeline                     emit parse/validate/transform stages (requires --traversal tree-walker,
+                                   or --traversal interpreter combined with --facade)
 
 Commands:
-  init [options]                     scaffold a new parser project (run rdp-gen init --help)`)
+  init [options]                 scaffold a new parser project (run rdp-gen init --help)`)
 }
 
 function printInitHelp(): void {

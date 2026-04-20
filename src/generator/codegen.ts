@@ -98,9 +98,11 @@ export function generateParser(source: string, options: GeneratorOptions = {}): 
       : EBNFParser.parse(source)
   detectLeftRecursion(ast)
 
-  const baseClass = observable ? 'ObservableRDParser' : 'RDParser'
+  const baseClass = observable ? 'ObservableRDParser' : 'ScannerlessRDParser'
   const importPath = observable ? '@configuredthings/rdp.js/observable' : '@configuredthings/rdp.js'
-  const importNames = observable ? `{ ObservableRDParser, type ParseObserver }` : `{ RDParser }`
+  const importNames = observable
+    ? `{ ObservableRDParser, type ParseObserver }`
+    : `{ ScannerlessRDParser }`
 
   const lines: string[] = []
 

@@ -54,3 +54,11 @@ Once `parseNumber()` returns, the stack unwinds to `parseTerm`, then `parseExpr`
 Left recursion can always be eliminated by rewriting the grammar to use iteration (`{...}` / `X, {X}`), which is what LL(1) grammars require.
 
 **The base class is more general.** [`RDParser`](/api/classes/RDParser.RDParser.html) exposes `restorePosition`, which lets [hand-written subclasses](/docs/extending/) implement backtracking and parse grammars beyond LL(1). [`rdp-gen`](/docs/cli/) does not emit backtracking code — that is a hand-crafting concern.
+
+## Scannerless parsing
+
+By default, `rdp-gen` generates a **scannerless** parser — one that operates directly on the raw input string with no separate tokenisation step. Every terminal in the grammar becomes a direct byte comparison in the generated code; there is no lexer phase, no token stream, and no split between "what is a token?" and "what does this token mean?".
+
+This is the right default. It keeps the generated output simple, the pipeline short, and the grammar self-contained. For most grammars it is also fast enough.
+
+The one case where scannerless parsing has a measurable cost is grammars with many large character-class rules — rules that enumerate 80+ individual characters as alternatives. In those cases a pre-tokenisation step can reduce the cost by 3–5×. See [Tokenising for performance](/docs/tokenising/) for the investigation that produced `TokenRDParser` and the `--lexer span` scaffold.

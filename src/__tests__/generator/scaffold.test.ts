@@ -7,52 +7,20 @@ const PARSER_NAME = 'DateParser'
 // ── Error cases ───────────────────────────────────────────────────────────────
 
 describe('generateScaffold — error cases', () => {
-  it('throws when facade is used without --inner', () => {
-    expect(() => generateScaffold(DATE_GRAMMAR, 'facade', { parserName: PARSER_NAME })).toThrow(
-      /--scaffold facade requires --inner/,
+  it('throws when no scaffold flags are provided', () => {
+    expect(() => generateScaffold(DATE_GRAMMAR, {}, { parserName: PARSER_NAME })).toThrow(
+      /At least one of --traversal, --transformer, or --lexer must be provided/,
     )
   })
 
-  it('throws when pipeline is used without --inner', () => {
-    expect(() => generateScaffold(DATE_GRAMMAR, 'pipeline', { parserName: PARSER_NAME })).toThrow(
-      /--scaffold pipeline requires --inner/,
-    )
-  })
-
-  it('throws when interpreter is used with --inner', () => {
+  it('throws when --traversal interpreter is combined with --pipeline without --facade', () => {
     expect(() =>
-      generateScaffold(DATE_GRAMMAR, 'interpreter', {
-        parserName: PARSER_NAME,
-        inner: 'interpreter',
-      }),
-    ).toThrow(/--inner is not applicable to --scaffold interpreter/)
-  })
-
-  it('throws when tree-walker is used with --inner', () => {
-    expect(() =>
-      generateScaffold(DATE_GRAMMAR, 'tree-walker', {
-        parserName: PARSER_NAME,
-        inner: 'tree-walker',
-      }),
-    ).toThrow(/--inner is not applicable to --scaffold tree-walker/)
-  })
-
-  it('throws when pipeline is used with pipeline:interpreter inner', () => {
-    expect(() =>
-      generateScaffold(DATE_GRAMMAR, 'pipeline', {
-        parserName: PARSER_NAME,
-        inner: 'pipeline:interpreter',
-      }),
-    ).toThrow(/--scaffold pipeline does not support --inner pipeline:\*/)
-  })
-
-  it('throws when pipeline is used with pipeline:tree-walker inner', () => {
-    expect(() =>
-      generateScaffold(DATE_GRAMMAR, 'pipeline', {
-        parserName: PARSER_NAME,
-        inner: 'pipeline:tree-walker',
-      }),
-    ).toThrow(/--scaffold pipeline does not support --inner pipeline:\*/)
+      generateScaffold(
+        DATE_GRAMMAR,
+        { traversal: 'interpreter', pipeline: true },
+        { parserName: PARSER_NAME },
+      ),
+    ).toThrow(/--traversal interpreter cannot be combined with --pipeline without --facade/)
   })
 })
 
@@ -62,7 +30,11 @@ describe('generateScaffold — interpreter', () => {
   let output: string
 
   beforeAll(() => {
-    output = generateScaffold(DATE_GRAMMAR, 'interpreter', { parserName: PARSER_NAME })
+    output = generateScaffold(
+      DATE_GRAMMAR,
+      { traversal: 'interpreter' },
+      { parserName: PARSER_NAME },
+    )
   })
 
   it('imports the parser class and every node type', () => {
@@ -98,7 +70,11 @@ describe('generateScaffold — tree-walker', () => {
   let output: string
 
   beforeAll(() => {
-    output = generateScaffold(DATE_GRAMMAR, 'tree-walker', { parserName: PARSER_NAME })
+    output = generateScaffold(
+      DATE_GRAMMAR,
+      { traversal: 'tree-walker' },
+      { parserName: PARSER_NAME },
+    )
   })
 
   it('imports childNodes and ParseTree from the parser module', () => {
@@ -131,10 +107,11 @@ describe('generateScaffold — facade + interpreter', () => {
   let output: string
 
   beforeAll(() => {
-    output = generateScaffold(DATE_GRAMMAR, 'facade', {
-      parserName: PARSER_NAME,
-      inner: 'interpreter',
-    })
+    output = generateScaffold(
+      DATE_GRAMMAR,
+      { traversal: 'interpreter', facade: true },
+      { parserName: PARSER_NAME },
+    )
   })
 
   it('imports the parser class and every node type', () => {
@@ -178,10 +155,11 @@ describe('generateScaffold — facade + tree-walker', () => {
   let output: string
 
   beforeAll(() => {
-    output = generateScaffold(DATE_GRAMMAR, 'facade', {
-      parserName: PARSER_NAME,
-      inner: 'tree-walker',
-    })
+    output = generateScaffold(
+      DATE_GRAMMAR,
+      { traversal: 'tree-walker', facade: true },
+      { parserName: PARSER_NAME },
+    )
   })
 
   it('imports childNodes, ParseTree, root node type, visit, and Visitor', () => {
@@ -228,10 +206,11 @@ describe('generateScaffold — facade + pipeline:interpreter', () => {
   let output: string
 
   beforeAll(() => {
-    output = generateScaffold(DATE_GRAMMAR, 'facade', {
-      parserName: PARSER_NAME,
-      inner: 'pipeline:interpreter',
-    })
+    output = generateScaffold(
+      DATE_GRAMMAR,
+      { traversal: 'interpreter', pipeline: true, facade: true },
+      { parserName: PARSER_NAME },
+    )
   })
 
   it('imports all node types (needed by private eval functions)', () => {
@@ -284,11 +263,11 @@ describe('generateScaffold — facade + pipeline:tree-walker', () => {
   let output: string
 
   beforeAll(() => {
-    output = generateScaffold(DATE_GRAMMAR, 'facade', {
-      parserName: PARSER_NAME,
-      treeName: 'ParseTree',
-      inner: 'pipeline:tree-walker',
-    })
+    output = generateScaffold(
+      DATE_GRAMMAR,
+      { traversal: 'tree-walker', pipeline: true, facade: true },
+      { parserName: PARSER_NAME, treeName: 'ParseTree' },
+    )
   })
 
   it('imports childNodes, ParseTree, root node type, visit, and Visitor', () => {
@@ -330,71 +309,17 @@ describe('generateScaffold — facade + pipeline:tree-walker', () => {
   })
 })
 
-// ── Pipeline + interpreter scaffold ─────────────────────────────────────────────
-
-describe('generateScaffold — pipeline + interpreter', () => {
-  let output: string
-
-  beforeAll(() => {
-    output = generateScaffold(DATE_GRAMMAR, 'pipeline', {
-      parserName: PARSER_NAME,
-      inner: 'interpreter',
-    })
-  })
-
-  it('imports all node types', () => {
-    expect(output).toContain(`  type DateNode,`)
-    expect(output).toContain(`  type YearNode,`)
-    expect(output).toContain(`  type DigitNode,`)
-  })
-
-  it('emits a DateResult interface and ValidationError interface', () => {
-    expect(output).toContain(`export interface DateResult`)
-    expect(output).toContain(`export interface ValidationError`)
-  })
-
-  it('emits all three exported stage functions', () => {
-    expect(output).toContain(`export function parse(input: string): DateNode`)
-    expect(output).toContain(`export function validate(`)
-    expect(output).toContain(`export function transform(tree: DateNode): DateResult`)
-  })
-
-  it('validate returns a discriminated union with errors array', () => {
-    expect(output).toContain(`ok: true`)
-    expect(output).toContain(`ok: false`)
-    expect(output).toContain(`errors: ValidationError[]`)
-  })
-
-  it('emits a loadDate() combinator that uses AggregateError', () => {
-    expect(output).toContain(`export function loadDate(input: string): DateResult`)
-    expect(output).toContain(`AggregateError`)
-    expect(output).toContain(`parse(input)`)
-    expect(output).toContain(`validate(tree)`)
-    expect(output).toContain(`transform(result.tree)`)
-  })
-
-  it('emits private eval functions for every rule', () => {
-    expect(output).toContain(`function evalDate(node: DateNode): unknown`)
-    expect(output).toContain(`function evalYear(node: YearNode): unknown`)
-    expect(output).toContain(`function evalDigit(node: DigitNode): unknown`)
-  })
-
-  it('transform calls the first eval function', () => {
-    expect(output).toContain(`evalDate(tree)`)
-  })
-})
-
 // ── Pipeline + tree-walker scaffold ──────────────────────────────────────────
 
 describe('generateScaffold — pipeline + tree-walker', () => {
   let output: string
 
   beforeAll(() => {
-    output = generateScaffold(DATE_GRAMMAR, 'pipeline', {
-      parserName: PARSER_NAME,
-      treeName: 'ParseTree',
-      inner: 'tree-walker',
-    })
+    output = generateScaffold(
+      DATE_GRAMMAR,
+      { traversal: 'tree-walker', pipeline: true },
+      { parserName: PARSER_NAME, treeName: 'ParseTree' },
+    )
   })
 
   it('imports childNodes, ParseTree, root node type, visit, and Visitor', () => {
@@ -444,9 +369,13 @@ describe('interpreter scaffold — runtime', () => {
 
   beforeAll(async () => {
     const parserSource = generateParser(DATE_GRAMMAR, { parserName: PARSER_NAME })
-    const scaffoldSource = generateScaffold(DATE_GRAMMAR, 'interpreter', {
-      parserName: PARSER_NAME,
-    })
+    const scaffoldSource = generateScaffold(
+      DATE_GRAMMAR,
+      { traversal: 'interpreter' },
+      {
+        parserName: PARSER_NAME,
+      },
+    )
     const { scaffold } = await importScaffold(scaffoldSource, parserSource, PARSER_NAME)
     evaluate = scaffold['evaluate'] as (input: string) => unknown
   })
@@ -469,9 +398,13 @@ describe('tree-walker scaffold — runtime', () => {
 
   beforeAll(async () => {
     const parserSource = generateParser(DATE_GRAMMAR, { parserName: PARSER_NAME })
-    const scaffoldSource = generateScaffold(DATE_GRAMMAR, 'tree-walker', {
-      parserName: PARSER_NAME,
-    })
+    const scaffoldSource = generateScaffold(
+      DATE_GRAMMAR,
+      { traversal: 'tree-walker' },
+      {
+        parserName: PARSER_NAME,
+      },
+    )
     const { scaffold, parser } = await importScaffold(scaffoldSource, parserSource, PARSER_NAME)
     walk = scaffold['walk'] as typeof walk
     DateParser = parser[PARSER_NAME] as typeof DateParser
@@ -496,10 +429,11 @@ describe('facade + interpreter scaffold — runtime', () => {
 
   beforeAll(async () => {
     const parserSource = generateParser(DATE_GRAMMAR, { parserName: PARSER_NAME })
-    const scaffoldSource = generateScaffold(DATE_GRAMMAR, 'facade', {
-      parserName: PARSER_NAME,
-      inner: 'interpreter',
-    })
+    const scaffoldSource = generateScaffold(
+      DATE_GRAMMAR,
+      { traversal: 'interpreter', facade: true },
+      { parserName: PARSER_NAME },
+    )
     const { scaffold } = await importScaffold(scaffoldSource, parserSource, PARSER_NAME)
     parseDate = scaffold['parseDate'] as (input: string) => unknown
     DateError = scaffold['DateError'] as new (input: string) => Error
@@ -537,10 +471,11 @@ describe('facade + tree-walker scaffold — runtime', () => {
 
   beforeAll(async () => {
     const parserSource = generateParser(DATE_GRAMMAR, { parserName: PARSER_NAME })
-    const scaffoldSource = generateScaffold(DATE_GRAMMAR, 'facade', {
-      parserName: PARSER_NAME,
-      inner: 'tree-walker',
-    })
+    const scaffoldSource = generateScaffold(
+      DATE_GRAMMAR,
+      { traversal: 'tree-walker', facade: true },
+      { parserName: PARSER_NAME },
+    )
     const { scaffold } = await importScaffold(scaffoldSource, parserSource, PARSER_NAME)
     parseDate = scaffold['parseDate'] as (input: string) => unknown
     DateError = scaffold['DateError'] as new (input: string) => Error
@@ -563,10 +498,11 @@ describe('facade + pipeline:interpreter scaffold — runtime', () => {
 
   beforeAll(async () => {
     const parserSource = generateParser(DATE_GRAMMAR, { parserName: PARSER_NAME })
-    const scaffoldSource = generateScaffold(DATE_GRAMMAR, 'facade', {
-      parserName: PARSER_NAME,
-      inner: 'pipeline:interpreter',
-    })
+    const scaffoldSource = generateScaffold(
+      DATE_GRAMMAR,
+      { traversal: 'interpreter', pipeline: true, facade: true },
+      { parserName: PARSER_NAME },
+    )
     const { scaffold } = await importScaffold(scaffoldSource, parserSource, PARSER_NAME)
     parseDate = scaffold['parseDate'] as (input: string) => unknown
     DateError = scaffold['DateError'] as new (input: string) => Error
@@ -589,11 +525,11 @@ describe('facade + pipeline:tree-walker scaffold — runtime', () => {
 
   beforeAll(async () => {
     const parserSource = generateParser(DATE_GRAMMAR, { parserName: PARSER_NAME })
-    const scaffoldSource = generateScaffold(DATE_GRAMMAR, 'facade', {
-      parserName: PARSER_NAME,
-      treeName: 'ParseTree',
-      inner: 'pipeline:tree-walker',
-    })
+    const scaffoldSource = generateScaffold(
+      DATE_GRAMMAR,
+      { traversal: 'tree-walker', pipeline: true, facade: true },
+      { parserName: PARSER_NAME, treeName: 'ParseTree' },
+    )
     const { scaffold } = await importScaffold(scaffoldSource, parserSource, PARSER_NAME)
     parseDate = scaffold['parseDate'] as (input: string) => unknown
     DateError = scaffold['DateError'] as new (input: string) => Error
@@ -608,50 +544,6 @@ describe('facade + pipeline:tree-walker scaffold — runtime', () => {
   })
 })
 
-// ── Scaffold runtime — pipeline + interpreter ───────────────────────────────────
-
-describe('pipeline + interpreter scaffold — runtime', () => {
-  let parse: (input: string) => { kind: string }
-  let validate: (tree: { kind: string }) => { ok: boolean }
-  let transform: (tree: { kind: string }) => unknown
-  let loadDate: (input: string) => unknown
-
-  beforeAll(async () => {
-    const parserSource = generateParser(DATE_GRAMMAR, { parserName: PARSER_NAME })
-    const scaffoldSource = generateScaffold(DATE_GRAMMAR, 'pipeline', {
-      parserName: PARSER_NAME,
-      inner: 'interpreter',
-    })
-    const { scaffold } = await importScaffold(scaffoldSource, parserSource, PARSER_NAME)
-    parse = scaffold['parse'] as typeof parse
-    validate = scaffold['validate'] as typeof validate
-    transform = scaffold['transform'] as typeof transform
-    loadDate = scaffold['loadDate'] as typeof loadDate
-  })
-
-  it('parse() returns a DateNode for valid input', () => {
-    expect(parse('2024-01-15').kind).toBe('Date')
-  })
-
-  it('parse() throws SyntaxError on invalid input', () => {
-    expect(() => parse('not-a-date')).toThrow(SyntaxError)
-  })
-
-  it('validate() returns ok:true out of the box', () => {
-    const tree = parse('2024-01-15')
-    expect(validate(tree)).toEqual({ ok: true, tree })
-  })
-
-  it('transform() throws not-implemented (eval function stub)', () => {
-    const tree = parse('2024-01-15')
-    expect(() => transform(tree)).toThrow('not implemented')
-  })
-
-  it('loadDate() throws SyntaxError on malformed input', () => {
-    expect(() => loadDate('not-a-date')).toThrow(SyntaxError)
-  })
-})
-
 // ── Scaffold runtime — pipeline + tree-walker ────────────────────────────────
 
 describe('pipeline + tree-walker scaffold — runtime', () => {
@@ -662,11 +554,11 @@ describe('pipeline + tree-walker scaffold — runtime', () => {
 
   beforeAll(async () => {
     const parserSource = generateParser(DATE_GRAMMAR, { parserName: PARSER_NAME })
-    const scaffoldSource = generateScaffold(DATE_GRAMMAR, 'pipeline', {
-      parserName: PARSER_NAME,
-      treeName: 'ParseTree',
-      inner: 'tree-walker',
-    })
+    const scaffoldSource = generateScaffold(
+      DATE_GRAMMAR,
+      { traversal: 'tree-walker', pipeline: true },
+      { parserName: PARSER_NAME, treeName: 'ParseTree' },
+    )
     const { scaffold } = await importScaffold(scaffoldSource, parserSource, PARSER_NAME)
     parse = scaffold['parse'] as typeof parse
     validate = scaffold['validate'] as typeof validate
@@ -703,7 +595,11 @@ describe('generateScaffold — transformer', () => {
   let output: string
 
   beforeAll(() => {
-    output = generateScaffold(DATE_GRAMMAR, 'transformer', { parserName: PARSER_NAME })
+    output = generateScaffold(
+      DATE_GRAMMAR,
+      { transformer: 'standard' },
+      { parserName: PARSER_NAME },
+    )
   })
 
   it('imports the parser, all node types, and ParseTree', () => {
@@ -735,15 +631,6 @@ describe('generateScaffold — transformer', () => {
     expect(output).toContain(`export function transformDate(input: string): unknown`)
     expect(output).toContain(`transform(${PARSER_NAME}.parse(input), dateTransformer)`)
   })
-
-  it('throws when --inner is supplied', () => {
-    expect(() =>
-      generateScaffold(DATE_GRAMMAR, 'transformer', {
-        parserName: PARSER_NAME,
-        inner: 'interpreter',
-      }),
-    ).toThrow(/--inner is not applicable to --scaffold transformer/)
-  })
 })
 
 // ── JSON transformer scaffold ─────────────────────────────────────────────────
@@ -752,7 +639,7 @@ describe('generateScaffold — json-transformer', () => {
   let output: string
 
   beforeAll(() => {
-    output = generateScaffold(DATE_GRAMMAR, 'json-transformer', { parserName: PARSER_NAME })
+    output = generateScaffold(DATE_GRAMMAR, { transformer: 'json' }, { parserName: PARSER_NAME })
   })
 
   it('imports the parser, all node types, and ParseTree', () => {
@@ -794,15 +681,6 @@ describe('generateScaffold — json-transformer', () => {
     expect(output).toContain(`export function jsonStringToDate(input: string): string`)
     expect(output).toContain(`transform(toJSONAST(input), jsonToDate)`)
   })
-
-  it('throws when --inner is supplied', () => {
-    expect(() =>
-      generateScaffold(DATE_GRAMMAR, 'json-transformer', {
-        parserName: PARSER_NAME,
-        inner: 'interpreter',
-      }),
-    ).toThrow(/--inner is not applicable to --scaffold json-transformer/)
-  })
 })
 
 // ── Scaffold runtime — transformer ────────────────────────────────────────────
@@ -812,9 +690,13 @@ describe('transformer scaffold — runtime', () => {
 
   beforeAll(async () => {
     const parserSource = generateParser(DATE_GRAMMAR, { parserName: PARSER_NAME })
-    const scaffoldSource = generateScaffold(DATE_GRAMMAR, 'transformer', {
-      parserName: PARSER_NAME,
-    })
+    const scaffoldSource = generateScaffold(
+      DATE_GRAMMAR,
+      { transformer: 'standard' },
+      {
+        parserName: PARSER_NAME,
+      },
+    )
     const { scaffold } = await importScaffold(scaffoldSource, parserSource, PARSER_NAME)
     transformDate = scaffold['transformDate'] as (input: string) => unknown
   })
@@ -832,9 +714,13 @@ describe('json-transformer scaffold — runtime', () => {
 
   beforeAll(async () => {
     const parserSource = generateParser(DATE_GRAMMAR, { parserName: PARSER_NAME })
-    const scaffoldSource = generateScaffold(DATE_GRAMMAR, 'json-transformer', {
-      parserName: PARSER_NAME,
-    })
+    const scaffoldSource = generateScaffold(
+      DATE_GRAMMAR,
+      { transformer: 'json' },
+      {
+        parserName: PARSER_NAME,
+      },
+    )
     const { scaffold } = await importScaffold(scaffoldSource, parserSource, PARSER_NAME)
     dateToJSONString = scaffold['dateToJSONString'] as (input: string) => string
     jsonStringToDate = scaffold['jsonStringToDate'] as (input: string) => string
@@ -852,10 +738,10 @@ describe('json-transformer scaffold — runtime', () => {
 // ── Init scaffold ─────────────────────────────────────────────────────────────
 
 describe('generateInitScaffold', () => {
-  it('emits a plain RDParser subclass by default', () => {
+  it('emits a plain ScannerlessRDParser subclass by default', () => {
     const output = generateInitScaffold({ className: 'MyParser' })
-    expect(output).toContain(`class MyParser extends RDParser`)
-    expect(output).toContain(`import { RDParser }`)
+    expect(output).toContain(`class MyParser extends ScannerlessRDParser`)
+    expect(output).toContain(`import { ScannerlessRDParser }`)
     expect(output).not.toContain('ObservableRDParser')
   })
 

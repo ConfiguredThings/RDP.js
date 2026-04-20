@@ -31,7 +31,7 @@ Pass [`--observable`](/docs/cli/#rdp-gen-grammar--generate-a-parser) to `rdp-gen
 rdp-gen grammar.ebnf --parser-name MyParser --observable --output MyParser.ts
 ```
 
-This changes the generated class to extend `ObservableRDParser` instead of `RDParser`, and
+This changes the generated class to extend `ObservableRDParser` instead of `ScannerlessRDParser`, and
 adds an optional `observer?: ParseObserver` second argument to the `static parse` method.
 
 ### `DebugObserver` — indented call tree
@@ -125,6 +125,32 @@ MyParser.parse('3 + 4', obs)
 console.log(obs.calls)
 // Map { 'expr' => 1, 'term' => 2, 'factor' => 2, 'number' => 2, 'wsp' => 5 }
 ```
+
+### Adding observer support to a `TokenRDParser` subclass
+
+`ObservableRDParser` is a concrete subclass of `ScannerlessRDParser` — it can't be used
+directly as a base for token-stream parsers. Use the `withObservable()` mixin instead,
+which applies observer support to any `RDParser` subclass:
+
+```ts
+import { TokenRDParser } from '@configuredthings/rdp.js'
+import { withObservable } from '@configuredthings/rdp.js/observable'
+import type { ParseObserver } from '@configuredthings/rdp.js/observable'
+
+class MyTokenParser extends withObservable(TokenRDParser) {
+  static parse(input: string, observer?: ParseObserver) {
+    const stream = classify(input, spanTokenize(input))
+    const parser = new MyTokenParser(stream)
+    if (observer) parser.withObserver(observer)
+    return parser.parse()
+  }
+  // ... #parseRule() stubs
+}
+```
+
+The mixin adds `withObserver(obs)`, `notifyEnter()`, and `notifyExit()` — call
+`notifyEnter`/`notifyExit` in each parse method to emit events, exactly as
+`--observable` does in generated scannerless parsers.
 
 ### Using `GrammarInterpreter` with an observer
 

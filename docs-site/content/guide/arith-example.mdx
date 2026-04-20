@@ -76,12 +76,12 @@ Run the scaffolds once, then edit the output freely — they are **not** regener
 
 | Scaffold | Command | Best for |
 |----------|---------|----------|
-| `interpreter` | `--scaffold interpreter` | Recursive evaluation / interpretation |
-| `facade` | `--scaffold facade --inner interpreter` | Hiding the parser behind a clean domain API |
-| `pipeline` | `--scaffold pipeline --inner interpreter` | Multi-stage parse → validate → transform |
-| `tree-walker` | `--scaffold tree-walker` | Tree traversal with per-node visitor dispatch |
-| `transformer` | `--scaffold transformer` | Exhaustive conversion to a typed IR or output |
-| `json-transformer` | `--scaffold json-transformer` | Two-way translation to/from JSON |
+| interpreter | `--traversal interpreter` | Recursive evaluation / interpretation |
+| facade | `--traversal interpreter --facade` | Hiding the parser behind a clean domain API |
+| pipeline | `--traversal tree-walker --pipeline` | Multi-stage parse → validate → transform |
+| tree-walker | `--traversal tree-walker` | Tree traversal with per-node visitor dispatch |
+| transformer | `--transformer` | Exhaustive conversion to a typed IR or output |
+| json-transformer | `--transformer json` | Two-way translation to/from JSON |
 
 ---
 
@@ -90,7 +90,7 @@ Run the scaffolds once, then edit the output freely — they are **not** regener
 ```bash
 rdp-gen src/grammars/arith.ebnf \
   --parser-name ArithParser \
-  --scaffold interpreter \
+  --traversal interpreter \
   --output examples/arith/arith-evaluator.ts
 ```
 
@@ -144,8 +144,8 @@ Full file: [`arith-evaluator.ts`](/api/functions/ArithExample.evaluate.html)
 ```bash
 rdp-gen src/grammars/arith.ebnf \
   --parser-name ArithParser \
-  --scaffold facade \
-  --inner interpreter \
+  --traversal interpreter \
+  --facade \
   --output examples/arith/arith-facade.ts
 ```
 
@@ -210,8 +210,8 @@ Full file: [`arith-facade.ts`](/api/functions/ArithExample.parseArith.html)
 ```bash
 rdp-gen src/grammars/arith.ebnf \
   --parser-name ArithParser \
-  --scaffold pipeline \
-  --inner interpreter \
+  --traversal tree-walker \
+  --pipeline \
   --output examples/arith/arith-pipeline.ts
 ```
 
@@ -244,7 +244,7 @@ Full file: [`arith-pipeline.ts`](/api/functions/ArithExample.parse.html)
 rdp-gen src/grammars/arith.ebnf \
   --parser-name ArithParser \
   --tree-name ArithTree \
-  --scaffold tree-walker \
+  --traversal tree-walker \
   --output examples/arith/arith-walker.ts
 ```
 
@@ -302,13 +302,13 @@ or operator precedence rules — those are artefacts of the surface format.
 
 #### Arith → IR
 
-The `--scaffold transformer` command generates the starting point:
+The `--transformer` flag generates the starting point:
 
 ```bash
 rdp-gen src/grammars/arith.ebnf \
   --parser-name ArithParser \
   --tree-name ArithTree \
-  --scaffold transformer \
+  --transformer \
   --output examples/arith/arith-to-ir.ts
 ```
 
@@ -373,7 +373,7 @@ export const irToRPN: Transformer<IR, string> = {
 rdp-gen src/grammars/arith.ebnf \
   --parser-name ArithParser \
   --tree-name ArithTree \
-  --scaffold json-transformer \
+  --transformer json \
   --output examples/arith/arith-json.ts
 ```
 
