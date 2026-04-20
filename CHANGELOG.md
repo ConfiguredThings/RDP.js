@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `generateScaffoldFiles(source, flags, options): Record<string, string>` — new programmatic API that returns a map of filename → content; used by the CLI when `--outdir` is given ([#25](https://github.com/ConfiguredThings/RDP.js/issues/25))
+- `InterpreterMixin<TTree, TResult>` and `WalkerMixin<TTree>` exported from the main package — TypeScript mixin interfaces for interpreter and tree-walker traversal patterns
+
+### Fixed 
+- `--transformer json --facade --pipeline` now produces three separate scaffold files (`{base}-transformer.ts`, `{base}-pipeline.ts`, `{base}-facade.ts`) so the facade is a genuine module boundary; consumers import only from the facade ([#25](https://github.com/ConfiguredThings/RDP.js/issues/25))
+
+### Changed
+
+- `--output <file>` renamed to `--outdir <dir>` — the flag now accepts a directory; artifact filenames are derived from the parser base name (e.g. `sisl-facade.ts`, `sisl-transformer.ts`) ([#25](https://github.com/ConfiguredThings/RDP.js/issues/25))
+- `--traversal` alone now adds mixin stubs directly to the generated parser file (can be re-generated freely) rather than producing a separate scaffold file. Using `--traversal` together with `--facade`, `--pipeline`, or `--transformer` still produces a scaffold file
+
 ## [0.6.0] - 2026-04-20
 
 ### Added
