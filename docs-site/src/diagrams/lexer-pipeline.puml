@@ -1,0 +1,66 @@
+@startuml lexer-pipeline
+skinparam componentStyle rectangle
+skinparam defaultFontName monospace
+skinparam ArrowColor #2d4a70
+skinparam ArrowFontColor #2d4a70
+skinparam ArrowFontSize 10
+skinparam ComponentBorderColor #0056A3
+skinparam ComponentBorderThickness 1.5
+skinparam ComponentBackgroundColor #cce8ff
+skinparam PackageBorderColor #7aaacc
+skinparam PackageBorderThickness 1.5
+skinparam BackgroundColor transparent
+skinparam linetype ortho
+
+skinparam component<<generated>> {
+  BackgroundColor #0056A3
+  FontColor white
+  BorderColor #003d7a
+}
+
+skinparam component<<agnostic>> {
+  BackgroundColor #e8f0e0
+  BorderColor #5a8a3a
+}
+
+skinparam component<<manual>> {
+  BackgroundColor #fff3cd
+  BorderColor #c09000
+}
+
+left to right direction
+
+together {
+  package "Scannerless (default)" #eef3fa {
+    component "input string" as sl_input
+    component "{Base}Parser\n(extends ScannerlessRDParser)" <<generated>> as sl_parser
+    component "typed ParseTree" as sl_output
+  }
+}
+
+together {
+  package "Span-lexer  (--lexer span)" #eef3fa {
+    component "input string" as sp_input
+    component "spanTokenize()\nSPAN_OPTS" <<agnostic>> as sp_span
+    component "classify()\nTT enum" <<generated>> as sp_classify
+    component "{Base}TokenParser\n(extends TokenRDParser)" <<manual>> as sp_parser
+    component "typed ParseTree" as sp_output
+  }
+}
+
+sl_input --> sl_parser : characters
+sl_parser --> sl_output
+
+sp_input --> sp_span : characters
+sp_span --> sp_classify : spans\n(boundaries only)
+sp_classify --> sp_parser : typed\ntoken stream
+sp_parser --> sp_output
+
+legend right
+  |= |= |
+  |<#cce8ff>  | generated — regenerate freely |
+  |<#e8f0e0>  | grammar-agnostic — shared logic |
+  |<#fff3cd>  | grammar-specific — fill in stubs |
+endlegend
+
+@enduml

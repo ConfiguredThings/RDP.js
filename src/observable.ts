@@ -6,6 +6,7 @@
  */
 
 import { RDParser } from './rdparser.js'
+import { ScannerlessRDParser } from './scannerless.js'
 
 /**
  * A single event emitted during a parse trace.
@@ -26,14 +27,14 @@ export interface ParseObserver {
   /**
    * Called when the parser enters a production method.
    * @param production - Name of the production rule.
-   * @param position - Current byte offset in the source.
+   * @param position - Current position in the source.
    */
   onEnterProduction(production: string, position: number): void
 
   /**
    * Called when the parser exits a production method.
    * @param production - Name of the production rule.
-   * @param position - Current byte offset in the source after the attempt.
+   * @param position - Current position after the attempt.
    * @param matched - Whether the production successfully matched input.
    */
   onExitProduction(production: string, position: number, matched: boolean): void
@@ -41,7 +42,7 @@ export interface ParseObserver {
   /**
    * Called when the parser throws a parse error.
    * @param message - The error message.
-   * @param position - Current byte offset in the source at the time of failure.
+   * @param position - Current position at the time of failure.
    */
   onError(message: string, position: number): void
 }
@@ -115,16 +116,68 @@ export class DebugObserver implements ParseObserver {
   }
 }
 
+// ── Mixin ─────────────────────────────────────────────────────────────────────
+
 /**
- * An `RDParser` subclass that adds opt-in observer support for tracing and debugging.
+ * Apply observer support to any concrete {@link RDParser} subclass.
  *
- * Extend `ObservableRDParser` instead of `RDParser` when parse tracing is needed.
- * Call `withObserver()` to attach a {@link ParseObserver} before parsing.
- * Production parsers that extend the lean `RDParser` directly carry zero observer overhead.
+ * ```ts
+ * import { withObservable, TokenRDParser } from '@configuredthings/rdp.js'
+ *
+ * class MyTokenParser extends withObservable(TokenRDParser) { ... }
+ * ```
+ *
+ * For the common scannerless case, use the pre-built {@link ObservableRDParser}.
+ *
+ * TypeScript note: the return type is cast to the base class because TypeScript
+ * cannot express anonymous mixin classes with private fields in exported positions.
+ * The observer methods (`withObserver`, `notifyEnter`, `notifyExit`) are present
+ * at runtime and accessible to subclasses via the prototype chain.
+ *
+ * @param Base - A concrete {@link RDParser} subclass constructor.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function withObservable<TBase extends new (...args: any[]) => RDParser>(Base: TBase): TBase {
+  // @ts-expect-error — RDParser has abstract members; at runtime Base is always a concrete subclass
+  class Observable extends Base {
+    #observer?: ParseObserver
+
+    withObserver(observer: ParseObserver): this {
+      this.#observer = observer
+      return this
+    }
+
+    protected notifyEnter(production: string): void {
+      this.#observer?.onEnterProduction(production, this.getPosition())
+    }
+
+    protected notifyExit(production: string, matched: boolean): void {
+      this.#observer?.onExitProduction(production, this.getPosition(), matched)
+    }
+
+    protected override error(message: string): never {
+      this.#observer?.onError(message, this.getPosition())
+      return super.error(message)
+    }
+  }
+
+  return Observable as unknown as TBase
+}
+
+/**
+ * A scannerless {@link ScannerlessRDParser} subclass with opt-in observer support
+ * for tracing and debugging.
+ *
+ * Extend `ObservableRDParser` instead of `ScannerlessRDParser` when parse tracing
+ * is needed. Call `withObserver()` to attach a {@link ParseObserver} before parsing.
+ * Parsers that extend `ScannerlessRDParser` directly carry zero observer overhead.
+ *
+ * Use {@link withObservable} to add observer support to {@link TokenRDParser} or
+ * other custom {@link RDParser} subclasses.
  *
  * Generated parsers use this base class when `rdp-gen` is run with `--observable`.
  */
-export class ObservableRDParser extends RDParser {
+export class ObservableRDParser extends ScannerlessRDParser {
   #observer?: ParseObserver
 
   /**

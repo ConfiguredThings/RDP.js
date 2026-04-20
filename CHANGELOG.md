@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- `ScannerlessRDParser` — concrete character-by-character parser, extracted from `RDParser`. Replaces direct `RDParser` extension for scannerless grammars.
+- `TokenRDParser` and `TokenStream` — new parser variant that operates over a pre-tokenised token stream rather than raw bytes.
+- `withObservable(Base)` — mixin function that adds `ParseObserver` support to any `RDParser` subclass (e.g. `withObservable(TokenRDParser)`).
+- `--scaffold` now accepts a `--lexer span` flag, emitting a span-tokeniser and classifier pipeline scaffold.
+
+### Changed
+
+- `RDParser` is now an **abstract base class**. It no longer contains character-reading methods (`peek`, `advance`, `matchChar`, etc.) — those live on `ScannerlessRDParser`. Existing parsers that extended `RDParser` directly must switch to `ScannerlessRDParser`.
+- `ObservableRDParser` now extends `ScannerlessRDParser` instead of `RDParser`.
+- `ScaffoldFlags` type replaced the previous scaffold option shape with orthogonal flags (`traversal`, `transformer`, `facade`, `pipeline`, `lexer`). Invalid combinations (e.g. `--traversal interpreter --pipeline` without `--facade`) now throw at codegen time.
+- Generated parser scaffolds reference `ScannerlessRDParser` instead of `RDParser` (except `--lexer span` scaffolds, which use `TokenRDParser`).
+
 ## [0.5.0] - 2026-04-19
 
 ### Added

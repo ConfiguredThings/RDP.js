@@ -17,7 +17,7 @@
 
 import ts from 'typescript'
 import { generateParser } from '../generator/index.js'
-import { RDParser } from '../rdparser.js'
+import { ScannerlessRDParser } from '../scannerless.js'
 import { ebnfMetaEBNF, ebnfMetaABNF, abnfMetaEBNF, abnfMetaABNF } from '../grammars/index.js'
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -48,7 +48,7 @@ function buildParser(
 
   new Function('require', 'exports', 'module', outputText)(
     (id: string) => {
-      if (id === '@configuredthings/rdp.js') return { RDParser }
+      if (id === '@configuredthings/rdp.js') return { ScannerlessRDParser }
       throw new Error(`Unexpected require('${id}')`)
     },
     mockExports,

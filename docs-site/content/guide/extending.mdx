@@ -5,10 +5,10 @@ order: 5
 section: 'Guides'
 ---
 
-## Extending `RDParser` — hand-crafted parsers
+## Extending `ScannerlessRDParser` — hand-crafted parsers
 
-For full control over the parse result type and error handling, subclass `RDParser` directly
-and implement each production rule as a method.
+For full control over the parse result type and error handling, subclass `ScannerlessRDParser`
+directly and implement each production rule as a method.
 
 ### Recommended pattern
 
@@ -19,9 +19,9 @@ one-shot lifecycle explicit — the instance is created, used once, then discard
 > generator, you get `private constructor` and `static parse(input: string)` for free.
 
 ```ts
-import { RDParser } from '@configuredthings/rdp.js'
+import { ScannerlessRDParser } from '@configuredthings/rdp.js'
 
-export class MyParser extends RDParser {
+export class MyParser extends ScannerlessRDParser {
   private constructor(source: DataView) { super(source) }
 
   static parse(input: string): MyResult {
@@ -67,10 +67,10 @@ The call graph below shows how the methods relate. The loop-back from `parseFact
 ![Parser method call graph showing parse calling parseExpr, which calls parseTerm in a loop, which calls parseFactor in a loop, which either calls parseNumber or loops back to parseExpr for parenthesised expressions](/parser-call-graph.svg)
 
 ```ts
-import { RDParser } from '@configuredthings/rdp.js'
+import { ScannerlessRDParser } from '@configuredthings/rdp.js'
 import { RDParserException } from '@configuredthings/rdp.js'
 
-export class ArithmeticParser extends RDParser {
+export class ArithmeticParser extends ScannerlessRDParser {
   private constructor(source: DataView) { super(source) }
 
   static parse(input: string): number {

@@ -4,6 +4,7 @@ import { MDXProvider } from '@mdx-js/react'
 import DocsSidebar from '../components/DocsSidebar'
 import { SiteHeader } from '../components/SiteHeader'
 import { DocRailroadDiagram } from '../components/DocRailroadDiagram'
+import { BenchmarkChart } from '../components/BenchmarkChart'
 import { TableOfContents } from '../components/TableOfContents'
 
 interface PageContext {
@@ -23,6 +24,7 @@ const mdxComponents = {
     <img src={src?.startsWith('/') ? withPrefix(src) : src} alt={alt} {...props} />
   ),
   RailroadDiagram: DocRailroadDiagram,
+  BenchmarkChart,
 }
 
 export default function DocPageTemplate({

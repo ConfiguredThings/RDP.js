@@ -56,9 +56,9 @@ describe('generateParser', () => {
     expect(output).toContain('class GreetingParser')
   })
 
-  it('uses RDParser as the base class by default', () => {
+  it('uses ScannerlessRDParser as the base class by default', () => {
     const output = generateParser(`Rule = 'x';`)
-    expect(output).toContain('extends RDParser')
+    expect(output).toContain('extends ScannerlessRDParser')
   })
 
   it('uses ObservableRDParser when observable is true', () => {

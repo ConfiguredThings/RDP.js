@@ -9,13 +9,13 @@
  * skipping, comment handling, and format-specific rule syntax.
  */
 
-import { RDParser } from '../rdparser.js'
+import { ScannerlessRDParser } from '../scannerless.js'
 import type { GrammarAST } from './ast.js'
 
 /** Shared `TextEncoder` instance used by all grammar-file parsers. */
 export const encoder = new TextEncoder()
 
-export abstract class GrammarParser extends RDParser {
+export abstract class GrammarParser extends ScannerlessRDParser {
   /** Parse the source and return a {@link GrammarAST}. */
   abstract parse(): GrammarAST
 

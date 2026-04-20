@@ -10,6 +10,8 @@
  */
 
 export { RDParser } from './rdparser.js'
+export { ScannerlessRDParser } from './scannerless.js'
+export { TokenRDParser, type TokenStream } from './tokenparser.js'
 export { RDParserException } from './exception.js'
 export { type JSONAST, toJSONAST, fromJSONAST } from './json-ast.js'
 

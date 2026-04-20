@@ -1,4 +1,4 @@
-import { RDParser } from '../rdparser.js'
+import { ScannerlessRDParser } from '../scannerless.js'
 import { RDParserException } from '../exception.js'
 
 function makeParser(input: string): ConcreteParser {
@@ -7,7 +7,7 @@ function makeParser(input: string): ConcreteParser {
 }
 
 // Minimal concrete subclass that exposes all protected methods for testing
-class ConcreteParser extends RDParser {
+class ConcreteParser extends ScannerlessRDParser {
   public override peek(): number | null {
     return super.peek()
   }
@@ -18,7 +18,7 @@ class ConcreteParser extends RDParser {
     return super.consume()
   }
   public override atEnd(): boolean {
-    return super.atEnd()
+    return super.atEnd() // ScannerlessRDParser implements this
   }
   public override matchChar(c: number): boolean {
     return super.matchChar(c)

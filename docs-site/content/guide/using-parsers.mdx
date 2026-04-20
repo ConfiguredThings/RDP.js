@@ -353,7 +353,7 @@ const result = transform(ExprParser.parse('2 + 3'), evaluator)  // number, never
 | Return type     | `T \| undefined`              | `T`                                    |
 | Use when        | Partial traversal, multiple passes | Exhaustive conversion             |
 
-`--scaffold transformer` generates a ready-to-fill `Transformer` object — see the
+`--transformer` generates a ready-to-fill `Transformer` object — see the
 [CLI reference](/docs/cli/#transformer-scaffold).
 
 #### Translating between two DSLs
@@ -363,8 +363,8 @@ shared domain IR, and wire them together. The IR is the hub — every parser low
 it, every emitter reads from it:
 
 ```bash
-rdp-gen format-a.ebnf --parser-name FormatAParser --scaffold transformer --output src/format-a-transformer.ts
-rdp-gen format-b.ebnf --parser-name FormatBParser --scaffold transformer --output src/format-b-transformer.ts
+rdp-gen format-a.ebnf --parser-name FormatAParser --transformer --output src/format-a-transformer.ts
+rdp-gen format-b.ebnf --parser-name FormatBParser --transformer --output src/format-b-transformer.ts
 ```
 
 Each scaffold gives you a `Transformer<FormatXTree, unknown>`. Replace `unknown` with
@@ -481,7 +481,7 @@ const toJSON   = (input: string) => fromJSONAST(transform(MyParser.parse(input),
 const toFormat = (input: string) => transform(toJSONAST(input), jsonToMyFormat)
 ```
 
-`--scaffold json-transformer` generates ready-to-fill stubs for both directions — see the
+`--transformer json` generates ready-to-fill stubs for both directions — see the
 [CLI reference](/docs/cli/#json-transformer-scaffold). For a complete worked example see
 [Translation: Arith to RPN and JSON](/docs/arith-example/#translation-arith-to-rpn-and-json).
 
@@ -748,22 +748,22 @@ parseDate('not-a-date')  // throws InvalidDateError (syntax error)
 
 ### Scaffolding
 
-`rdp-gen --scaffold <pattern>` emits a typed starter file wired up to your grammar —
-imports, entry points, stubs, and error handling already in place. The CLI flag names
-match the pattern names:
+Scaffold flags emit a typed starter file wired up to your grammar — imports, entry
+points, stubs, and error handling already in place. Flags compose: pass multiple to
+combine strategies:
 
-| `--scaffold` | Generates |
+| Flag(s) | Generates |
 |---|---|
-| `interpreter` | One `eval{Rule}()` function per rule + `evaluate()` entry point |
-| `tree-walker` | `walk()` utility + commented `Visitor` stubs for every rule |
-| `transformer` | `Transformer<ParseTree, unknown>` object with one stub per rule + entry function |
-| `json-transformer` | Two `Transformer` objects (format → JSONAST and JSONAST → format) + round-trip helpers |
-| `facade` | Public `parse{Base}()`, `{Base}Result` class, `{Base}Error` — wraps any `--inner` strategy |
-| `pipeline` | Exported `parse`/`validate`/`transform` stages + `load{Base}()` combinator |
+| `--traversal interpreter` | One `eval{Rule}()` function per rule + `evaluate()` entry point |
+| `--traversal tree-walker` | `walk()` utility + commented `Visitor` stubs for every rule |
+| `--transformer` | `Transformer<ParseTree, unknown>` object with one stub per rule + entry function |
+| `--transformer json` | Two `Transformer` objects (format → JSONAST and JSONAST → format) + round-trip helpers |
+| `--traversal <strategy> --facade` | Public `parse{Base}()`, `{Base}Result` class, `{Base}Error` — wraps the chosen traversal |
+| `--traversal tree-walker --pipeline` | Exported `parse`/`validate`/`transform` stages + `load{Base}()` combinator |
 
-Because the patterns compose, you can run multiple scaffolds for the same grammar:
-for example, `--scaffold facade` for the public module and `--scaffold transformer` for
-the implementation it wraps. See
-[CLI Reference — `--scaffold`](/docs/cli/#--scaffold--generate-a-usage-scaffold),
+Because the patterns compose, you can run multiple scaffold commands for the same grammar:
+for example, `--traversal interpreter --facade` for the public module and `--transformer`
+for the implementation it wraps. See the
+[CLI reference](/docs/cli/#scaffolding),
 or the [arithmetic worked example](/docs/arith-example/) for all patterns
 applied to a complete grammar.
