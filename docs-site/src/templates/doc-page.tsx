@@ -6,6 +6,7 @@ import { SiteHeader } from '../components/SiteHeader'
 import { DocRailroadDiagram } from '../components/DocRailroadDiagram'
 import { BenchmarkChart } from '../components/BenchmarkChart'
 import { TableOfContents } from '../components/TableOfContents'
+import { CopyCodeBlock } from '../components/CopyCodeBlock'
 
 interface PageContext {
   id: string
@@ -23,6 +24,7 @@ const mdxComponents = {
   img: ({ src, alt, ...props }: React.ImgHTMLAttributes<HTMLImageElement>) => (
     <img src={src?.startsWith('/') ? withPrefix(src) : src} alt={alt} {...props} />
   ),
+  pre: CopyCodeBlock,
   RailroadDiagram: DocRailroadDiagram,
   BenchmarkChart,
 }

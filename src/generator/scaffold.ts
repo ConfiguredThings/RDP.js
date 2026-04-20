@@ -1,43 +1,109 @@
 /**
  * Scaffold generators — emit one-time starter files for each usage pattern.
  *
- * Unlike the generated parser, scaffold output is intended to be edited by hand
- * and is NOT regenerated. It is a starting point, not a derived artefact.
+ * The scaffold router resolves flags into an ordered stack of independent
+ * sections, then composes them: each section declares its own imports, which
+ * the composer merges and deduplicates before emitting the final file.
+ *
+ * Adding a new flag combination means adding a new branch to `planScaffold`
+ * and, if needed, a new section generator — not a new monolithic function.
  */
 
 import type { GrammarAST, ProductionRule, RuleBody } from './ast.js'
 import { EBNFParser } from './ebnf-parser.js'
 import { ABNFParser } from './abnf-parser.js'
 import { detectLeftRecursion } from './left-recursion.js'
+import { generateParser } from './codegen.js'
 import type { GeneratorOptions } from './codegen.js'
-import { inferFieldNames, typeForBody } from './type-gen.js'
+import { inferFieldNames, typeForBody, emitTypeDeclarations } from './type-gen.js'
+
+// ── Public enums ──────────────────────────────────────────────────────────────
+
+/** How the generated scaffold traverses the parse tree. */
+export const Traversal = {
+  /** One typed `eval*` function per rule; evaluates directly from the tree. */
+  Interpreter: 'interpreter',
+  /** A `walk()` utility + `Visitor` stubs; driven by a depth-first tree walk. */
+  TreeWalker: 'tree-walker',
+} as const
+export type Traversal = (typeof Traversal)[keyof typeof Traversal]
+
+/** Which Transformer scaffold variant to emit. */
+export const Transformer = {
+  /** `Transformer<ParseTree, unknown>` with one handler stub per rule. */
+  Standard: 'standard',
+  /** Two-way stubs: `ParseTree → JSONAST` and `JSONAST → string`. */
+  JSON: 'json',
+} as const
+export type Transformer = (typeof Transformer)[keyof typeof Transformer]
+
+/** Tokenisation strategy for the generated parser. */
+export const Lexer = {
+  /** Characters → AST directly; no separate tokeniser (default). */
+  Scannerless: 'scannerless',
+  /** Emit a span tokeniser + classifier scaffold alongside the parser. */
+  Span: 'span',
+} as const
+export type Lexer = (typeof Lexer)[keyof typeof Lexer]
+
+// ── Public scaffold flags ─────────────────────────────────────────────────────
 
 /**
  * Orthogonal scaffold configuration flags.
  *
  * Presence of any flag switches `generateScaffold` into scaffold mode.
- * All combinations are valid except `--traversal interpreter` with `--pipeline`
- * unless `--facade` is also set (the facade wraps a private pipeline whose
- * `#transform` uses the interpreter, so an intermediate tree is still produced).
+ * `traversal` and `transformer` are mutually exclusive.
+ * `pipeline` requires `traversal: tree-walker` (interpreter has no intermediate tree).
  */
 export type ScaffoldFlags = {
-  /** Traversal strategy used inside the scaffold. */
-  traversal?: 'interpreter' | 'tree-walker'
-  /** Emit a Transformer scaffold. `'json'` produces the two-way JSON variant. */
-  transformer?: 'standard' | 'json'
-  /** Wrap the scaffold in a module-as-facade (requires `traversal` or `transformer`). */
+  /** Traversal strategy mixed in to the generated scaffold. */
+  traversal?: Traversal
+  /** Emit a Transformer scaffold. */
+  transformer?: Transformer
+  /** Wrap the scaffold in a module-as-facade. */
   facade?: boolean
-  /** Emit pipeline stages: `parse` / `validate` / `transform` (requires `traversal`). */
+  /** Emit pipeline stages: `parse` / `validate` / `transform`. */
   pipeline?: boolean
-  /** Include a span tokeniser + classifier pipeline. */
-  lexer?: 'span'
+  /** Tokenisation strategy for the generated parser. Defaults to `Lexer.Scannerless`. */
+  lexer?: Lexer
 }
+
+// ── Internal types ────────────────────────────────────────────────────────────
+
+/** Derived names built once from the grammar and generator options. */
+type ScaffoldCtx = {
+  parserName: string
+  parserModule: string
+  base: string
+  camelBase: string
+  treeName: string
+  nodeTypes: string[]
+  firstNodeType: string
+  firstRuleName: string
+  errorClass: string
+  resultClass: string
+  pipelineClass: string
+  loadFn: string
+  entryFn: string
+  /** Import path for the transformer artifact (e.g. `./date-transformer.js`). */
+  transformerModule: string
+  /** Import path for the pipeline artifact (e.g. `./date-pipeline.js`). */
+  pipelineModule: string
+}
+
+/** A single import declaration contributed by a section. */
+type Import = { from: string; names: string[]; disabled?: true }
+
+/** One logical block of generated code with its import requirements. */
+type Section = { header: string | null; imports: Import[]; lines: string[] }
+
+/** The full generation plan produced by `planScaffold`. */
+type ScaffoldPlan = { variantLabel: string; stepsLines: string[]; sections: Section[] }
+
+// ── Public entry point ────────────────────────────────────────────────────────
 
 /**
  * Generate a one-time scaffold file driven by orthogonal `ScaffoldFlags`.
- *
- * The scaffold is intended as a starting point — edit it freely. Unlike the
- * generated parser it is not designed to be regenerated from the grammar.
  *
  * @param source  - EBNF or ABNF grammar source text.
  * @param flags   - Which scaffold dimensions to include (see {@link ScaffoldFlags}).
@@ -51,23 +117,23 @@ export function generateScaffold(
   flags: ScaffoldFlags,
   options: GeneratorOptions = {},
 ): string {
-  const { traversal, transformer, facade, pipeline, lexer } = flags
+  const { traversal, transformer, pipeline, facade } = flags
 
-  // ── Validate combinations ──────────────────────────────────────────────────
-  if (traversal === 'interpreter' && pipeline && !facade) {
+  if (traversal && transformer) {
     throw new Error(
-      '--traversal interpreter cannot be combined with --pipeline without --facade. ' +
-        'The standalone pipeline pattern requires an intermediate tree for its validate stage. ' +
-        'Use --traversal tree-walker --pipeline, or add --facade to wrap the pipeline.',
+      `--traversal and --transformer are mutually exclusive. ` +
+        `Use --traversal (interpreter or tree-walker) to walk the parse tree directly, ` +
+        `or --transformer to emit a Transformer object — not both in the same scaffold.`,
     )
   }
-  if (!traversal && !transformer && !lexer) {
+  if (traversal === Traversal.Interpreter && pipeline) {
     throw new Error(
-      'At least one of --traversal, --transformer, or --lexer must be provided to generate a scaffold.',
+      '--traversal interpreter cannot be combined with --pipeline. ' +
+        'The interpreter evaluates directly during parsing — there is no intermediate tree for ' +
+        'the validate stage to inspect. Use --traversal tree-walker --pipeline instead.',
     )
   }
 
-  // ── Parse grammar ──────────────────────────────────────────────────────────
   const format = options.format ?? 'ebnf'
   const parserName = options.parserName ?? 'GeneratedParser'
   const treeName = options.treeName ?? 'ParseTree'
@@ -82,718 +148,618 @@ export function generateScaffold(
       : EBNFParser.parse(source)
   detectLeftRecursion(ast)
 
-  // ── Route to generator ─────────────────────────────────────────────────────
-
-  // Transformer path (mutually exclusive with traversal-based paths)
-  if (transformer) {
-    return transformer === 'json'
-      ? generateJsonTransformerScaffold(ast, parserName, treeName)
-      : generateTransformerScaffold(ast, parserName, treeName)
+  // No separate scaffold file needed — route directly to the appropriate generator.
+  if (!transformer && !facade && !pipeline) {
+    if (flags.lexer === Lexer.Span && !traversal) {
+      // Span-only: emit the span tokeniser scaffold.
+      return generateSpanLexerScaffold(ast, parserName, false, treeName)
+    }
+    // Plain parser or traversal-mixin (scannerless or span+traversal): mixin stubs
+    // land inside the parser class itself. Span tokeniser is a separate CLI concern.
+    return generateParser(source, {
+      ...options,
+      ...(traversal !== undefined && { traversal }),
+    })
   }
 
-  // Lexer path — may optionally wire up a traversal
-  if (lexer === 'span') {
-    if (traversal === 'interpreter') return generateSpanLexerScaffold(ast, parserName, true)
-    if (!traversal) return generateSpanLexerScaffold(ast, parserName, false)
-    throw new Error(`--lexer span --traversal ${traversal} is not yet implemented.`)
+  if (flags.lexer === Lexer.Span) {
+    if (!traversal && !transformer && !pipeline && !facade) {
+      // Already handled above, but guard for safety.
+      return generateSpanLexerScaffold(ast, parserName, false, treeName)
+    }
+    // Scaffold flags present — fall through to planScaffold.
+    // The scaffold templates reference the parser by name and are lexer-agnostic;
+    // the CLI writes the span-lexer parser to a separate file.
   }
 
-  // Pure traversal path
-  if (traversal === 'interpreter') {
-    if (facade && pipeline) return generateFacadePipelineScaffold(ast, parserName, 'interpreter')
-    if (facade) return generateFacadeInterpreterScaffold(ast, parserName)
-    return generateInterpreterScaffold(ast, parserName)
+  const ctx = buildCtx(ast, parserName, treeName)
+  const plan = planScaffold(flags, ast, ctx)
+  return compose(plan, ctx)
+}
+
+// ── Context builder ───────────────────────────────────────────────────────────
+
+function buildCtx(ast: GrammarAST, parserName: string, treeName: string): ScaffoldCtx {
+  const firstRule = ast.rules[0]
+  const base = stripParserSuffix(parserName)
+  const camelBase = base.charAt(0).toLowerCase() + base.slice(1)
+  const nodeTypes = ast.rules.map((r) => `${pascalCase(r.name)}Node`)
+  const firstNodeType = firstRule ? `${pascalCase(firstRule.name)}Node` : 'never'
+  return {
+    parserName,
+    parserModule: `./${parserName}.js`,
+    base,
+    camelBase,
+    treeName,
+    nodeTypes,
+    firstNodeType,
+    firstRuleName: firstRule?.name ?? '',
+    errorClass: `${base}Error`,
+    resultClass: `${base}Result`,
+    pipelineClass: `${base}Pipeline`,
+    loadFn: `load${base}`,
+    entryFn: `parse${base}`,
+    transformerModule: `./${camelBase}-transformer.js`,
+    pipelineModule: `./${camelBase}-pipeline.js`,
+  }
+}
+
+// ── Planner ───────────────────────────────────────────────────────────────────
+
+function planScaffold(flags: ScaffoldFlags, ast: GrammarAST, ctx: ScaffoldCtx): ScaffoldPlan {
+  const { traversal, transformer, facade, pipeline } = flags
+
+  // ── JSON transformer ────────────────────────────────────────────────────────
+  if (transformer === Transformer.JSON) {
+    if (facade && pipeline) {
+      return {
+        variantLabel: 'Facade + pipeline:json',
+        stepsLines: [
+          `// Steps: 1) fill in ${ctx.camelBase}ToJSON handlers  2) fill in jsonTo${ctx.base} handlers`,
+          `//        3) add semantic validation in #validate  4) remove eslint-disable-next-line comments`,
+        ],
+        sections: [
+          jsonTransformerSection(ast, ctx),
+          errorSection(ctx),
+          jsonPublicApiSection(ctx, true),
+          jsonPipelineSection(ast, ctx),
+        ],
+      }
+    }
+    return {
+      variantLabel: 'JSON transformer',
+      stepsLines: [
+        `// Steps: 1) fill in ${ctx.camelBase}ToJSON handlers  2) fill in jsonTo${ctx.base} handlers`,
+        `//        3) remove eslint-disable-next-line comments — present only to keep stubs lint-clean`,
+      ],
+      sections: [jsonTransformerSection(ast, ctx), jsonPublicApiSection(ctx, false)],
+    }
   }
 
-  if (traversal === 'tree-walker') {
-    if (facade && pipeline)
-      return generateFacadePipelineScaffold(ast, parserName, 'tree-walker', treeName)
-    if (facade) return generateFacadeWalkerScaffold(ast, parserName, treeName)
-    if (pipeline) return generatePipelineWalkerScaffold(ast, parserName, treeName)
-    return generateWalkerScaffold(ast, parserName, treeName)
+  // ── Standard transformer ────────────────────────────────────────────────────
+  if (transformer === Transformer.Standard) {
+    return {
+      variantLabel: 'Transformer',
+      stepsLines: [
+        `// Steps: 1) replace 'unknown' with your concrete return type  2) fill in the handlers`,
+        `//        3) remove eslint-disable-next-line comments — present only to keep stubs lint-clean`,
+      ],
+      sections: [standardTransformerSection(ast, ctx)],
+    }
+  }
+
+  // ── Interpreter ─────────────────────────────────────────────────────────────
+  if (traversal === Traversal.Interpreter) {
+    // facade is guaranteed here (pipeline+interpreter is validated out above)
+    return {
+      variantLabel: 'Facade + interpreter',
+      stepsLines: [
+        `// Steps: 1) define ${ctx.resultClass} constructor fields  2) fill in eval methods`,
+        `//        3) implement static from() using the eval results  4) remove eslint-disable-next-line comments`,
+      ],
+      sections: [
+        domainResultSection(ctx, Traversal.Interpreter),
+        errorSection(ctx),
+        facadePublicApiSection(ctx, false),
+        interpreterPrivateSection(ast, ctx, {
+          header:
+            '// ── Private ──────────────────────────────────────────────────────────────────',
+          withJsdoc: false,
+        }),
+      ],
+    }
+  }
+
+  // ── Tree-walker ─────────────────────────────────────────────────────────────
+  if (traversal === Traversal.TreeWalker) {
+    if (facade && pipeline) {
+      return {
+        variantLabel: 'Facade + pipeline:tree-walker',
+        stepsLines: [
+          `// Steps: 1) define ${ctx.resultClass} fields  2) fill in #validate and #transform`,
+          `//        3) implement ${ctx.resultClass}.from()  4) remove eslint-disable-next-line comments`,
+        ],
+        sections: [
+          domainResultSection(ctx, Traversal.TreeWalker),
+          errorSection(ctx),
+          facadePublicApiSection(ctx, true),
+          facadePipelineSection(ast, ctx, Traversal.TreeWalker),
+          walkerPrivateSection(
+            ast,
+            ctx,
+            '// ── Private walk utilities ───────────────────────────────────────────────────',
+          ),
+        ],
+      }
+    }
+    if (facade) {
+      return {
+        variantLabel: 'Facade + tree-walker',
+        stepsLines: [
+          `// Steps: 1) define ${ctx.resultClass} fields  2) implement static from() using walk()`,
+          `//        3) uncomment and fill in the visitor  4) remove eslint-disable-next-line comments`,
+        ],
+        sections: [
+          domainResultSection(ctx, Traversal.TreeWalker),
+          errorSection(ctx),
+          facadePublicApiSection(ctx, false),
+          walkerPrivateSection(
+            ast,
+            ctx,
+            '// ── Private ──────────────────────────────────────────────────────────────────',
+          ),
+        ],
+      }
+    }
+    if (pipeline) {
+      return {
+        variantLabel: 'Pipeline + tree-walker',
+        stepsLines: [
+          `// Steps: 1) define ${ctx.resultClass} fields  2) fill in validate()  3) fill in the visitor inside transform()`,
+          `//        4) remove eslint-disable-next-line comments`,
+        ],
+        sections: [
+          pipelineTypesSection(ctx),
+          pipelineStagesSection(ast, ctx),
+          walkerPrivateSection(
+            ast,
+            ctx,
+            '// ── Private walk utilities ───────────────────────────────────────────────────',
+          ),
+        ],
+      }
+    }
   }
 
   throw new Error('unhandled scaffold flag combination')
 }
 
-// ── Interpreter scaffold ──────────────────────────────────────────────────────
+// ── Composer ──────────────────────────────────────────────────────────────────
 
-function generateInterpreterScaffold(ast: GrammarAST, parserName: string): string {
-  const firstRule = ast.rules[0]
-  if (!firstRule) return ''
-
-  const modulePath = `./${parserName}.js`
-  const nodeTypes = ast.rules.map((r) => `${pascalCase(r.name)}Node`)
+function compose(plan: ScaffoldPlan, ctx: ScaffoldCtx): string {
+  const { variantLabel, stepsLines, sections } = plan
   const lines: string[] = []
 
   lines.push(
-    `// Interpreter scaffold generated by rdp-gen — this file is not regenerated; edit freely.`,
+    `// ${variantLabel} scaffold generated by rdp-gen — this file is not regenerated; edit freely.`,
   )
-  lines.push(
-    `// Steps: 1) replace 'unknown' with your concrete return types  2) fill in the function bodies`,
-  )
-  lines.push(
-    `//        3) remove eslint-disable-next-line comments — present only to keep stubs lint-clean`,
-  )
-  lines.push(``)
-  lines.push(`import {`)
-  lines.push(`  ${parserName},`)
-  for (const t of nodeTypes) lines.push(`  type ${t},`)
-  lines.push(`} from '${modulePath}'`)
-  lines.push(`import { RDParserException } from '@configuredthings/rdp.js'`)
-  lines.push(``)
-  lines.push(`/**`)
-  lines.push(` * Parse \`input\` and evaluate it to a result.`)
-  lines.push(` *`)
-  lines.push(` * Replace the \`unknown\` return type with your concrete result type once`)
-  lines.push(` * you have filled in the \`eval*\` functions below.`)
-  lines.push(` *`)
-  lines.push(` * @param input - Source string to parse and evaluate.`)
-  lines.push(` * @returns The evaluated result (narrowed once implemented).`)
-  lines.push(` * @throws {Error} If \`input\` does not match the grammar.`)
-  lines.push(` */`)
-  lines.push(`export function evaluate(input: string): unknown {`)
-  lines.push(`  try {`)
-  lines.push(`    return eval${pascalCase(firstRule.name)}(${parserName}.parse(input))`)
-  lines.push(`  } catch (e) {`)
-  lines.push(
-    `    if (e instanceof RDParserException) throw new Error(\`parse error: "\${input}"\`)`,
-  )
-  lines.push(`    throw e`)
-  lines.push(`  }`)
-  lines.push(`}`)
+  for (const l of stepsLines) lines.push(l)
+  lines.push('')
+
+  // Merge imports: deduplicate names per module, preserve first-seen module order.
+  const importMap = new Map<string, { names: string[]; disabled: boolean }>()
+  const importOrder: string[] = []
+  for (const section of sections) {
+    for (const imp of section.imports) {
+      if (!importMap.has(imp.from)) {
+        importMap.set(imp.from, { names: [], disabled: imp.disabled === true })
+        importOrder.push(imp.from)
+      }
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      const entry = importMap.get(imp.from)!
+      for (const name of imp.names) {
+        if (!entry.names.includes(name)) entry.names.push(name)
+      }
+    }
+  }
+
+  for (const from of importOrder) {
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    const { names, disabled } = importMap.get(from)!
+    // Within each module: values (no "type " prefix) first, then types.
+    const sorted = [
+      ...names.filter((n) => !n.startsWith('type ')),
+      ...names.filter((n) => n.startsWith('type ')),
+    ]
+    if (disabled) lines.push(`// eslint-disable-next-line @typescript-eslint/no-unused-vars`)
+    // Use multi-line format for the parser module when many names; single-line otherwise.
+    if (from === ctx.parserModule && sorted.length > 4) {
+      lines.push(`import {`)
+      for (const name of sorted) lines.push(`  ${name},`)
+      lines.push(`} from '${from}'`)
+    } else {
+      lines.push(`import { ${sorted.join(', ')} } from '${from}'`)
+    }
+  }
+  if (importOrder.length > 0) lines.push('')
+
+  for (const section of sections) {
+    if (section.header) {
+      lines.push(section.header)
+      lines.push('')
+    }
+    lines.push(...section.lines)
+  }
+
+  return lines.join('\n')
+}
+
+// ── Section generators ────────────────────────────────────────────────────────
+
+/** Eval stub functions — one per grammar rule (used by facade+interpreter). */
+function interpreterPrivateSection(
+  ast: GrammarAST,
+  ctx: ScaffoldCtx,
+  opts: { header: string | null; withJsdoc: boolean },
+): Section {
+  const nodeTypeNames = ast.rules.map((r) => `type ${pascalCase(r.name)}Node`)
+  const lines: string[] = []
 
   for (const rule of ast.rules) {
     const nodeType = `${pascalCase(rule.name)}Node`
     lines.push(``)
-    lines.push(`/**`)
-    lines.push(` * Evaluate a \`${rule.name}\` node.`)
-    lines.push(` *`)
-    lines.push(` * @param node - The {@link ${nodeType}} to evaluate.`)
-    lines.push(` * @returns The evaluated result (replace \`unknown\` with your concrete type).`)
-    lines.push(` */`)
+    if (opts.withJsdoc) {
+      lines.push(`/**`)
+      lines.push(` * Evaluate a \`${rule.name}\` node.`)
+      lines.push(` *`)
+      lines.push(` * @param node - The {@link ${nodeType}} to evaluate.`)
+      lines.push(` * @returns The evaluated result (replace \`unknown\` with your concrete type).`)
+      lines.push(` */`)
+    }
     lines.push(`// eslint-disable-next-line @typescript-eslint/no-unused-vars`)
     lines.push(`function eval${pascalCase(rule.name)}(node: ${nodeType}): unknown {`)
     for (const hint of fieldHints(rule)) lines.push(`  // ${hint}`)
     lines.push(`  throw new Error('not implemented')`)
     lines.push(`}`)
   }
-
   lines.push(``)
-  return lines.join('\n')
-}
 
-// ── Walker scaffold ───────────────────────────────────────────────────────────
-
-function generateWalkerScaffold(ast: GrammarAST, parserName: string, treeName: string): string {
-  const firstRule = ast.rules[0]
-  if (!firstRule) return ''
-
-  const modulePath = `./${parserName}.js`
-  const lines: string[] = []
-
-  lines.push(
-    `// Tree-walking scaffold generated by rdp-gen — this file is not regenerated; edit freely.`,
-  )
-  lines.push(`// childNodes() is always present in the generated parser file.`)
-  lines.push(
-    `// Once you uncomment the walk call below, remove the eslint-disable-next-line comments.`,
-  )
-  lines.push(``)
-  lines.push(`// eslint-disable-next-line @typescript-eslint/no-unused-vars`)
-  lines.push(`import { ${parserName}, childNodes, type ${treeName} } from '${modulePath}'`)
-  lines.push(`// eslint-disable-next-line @typescript-eslint/no-unused-vars`)
-  lines.push(`import { visit, type Visitor } from '@configuredthings/rdp.js'`)
-  lines.push(``)
-  lines.push(`/**`)
-  lines.push(` * Walk \`root\` depth-first (pre-order), calling \`fn\` on every node.`)
-  lines.push(` *`)
-  lines.push(` * @param root - The tree node to start from.`)
-  lines.push(` * @param fn - Called once per node visited, before its children.`)
-  lines.push(` */`)
-  lines.push(`export function walk(root: ${treeName}, fn: (node: ${treeName}) => void): void {`)
-  lines.push(`  fn(root)`)
-  lines.push(`  for (const child of childNodes(root)) walk(child, fn)`)
-  lines.push(`}`)
-  lines.push(``)
-  lines.push(`// Add handlers for the node kinds you care about.`)
-  lines.push(`// Use Required<Visitor<${treeName}>> to enforce that every kind is handled.`)
-  lines.push(`//`)
-  lines.push(`// const visitor: Visitor<${treeName}> = {`)
-  for (const rule of ast.rules) {
-    lines.push(`//   '${rule.name}': (node) => { /* ... */ },`)
+  return {
+    header: opts.header,
+    imports: [{ from: ctx.parserModule, names: nodeTypeNames }],
+    lines,
   }
-  lines.push(`// }`)
-  lines.push(`//`)
-  lines.push(`// walk(${parserName}.parse(input), (node) => visit(node, visitor))`)
-  lines.push(``)
-
-  return lines.join('\n')
 }
 
-// ── Facade + interpreter scaffold ─────────────────────────────────────────────
-
-function generateFacadeInterpreterScaffold(ast: GrammarAST, parserName: string): string {
-  const firstRule = ast.rules[0]
-  if (!firstRule) return ''
-
-  const base = stripParserSuffix(parserName)
-  const modulePath = `./${parserName}.js`
-  const nodeTypes = ast.rules.map((r) => `${pascalCase(r.name)}Node`)
-  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-  const firstNodeType = nodeTypes[0]!
-  const resultClass = `${base}Result`
-  const errorClass = `${base}Error`
-  const entryFn = `parse${base}`
-  const lines: string[] = []
-
-  lines.push(
-    `// Facade + interpreter scaffold generated by rdp-gen — this file is not regenerated; edit freely.`,
-  )
-  lines.push(`// Steps: 1) define ${resultClass} constructor fields  2) fill in eval functions`)
-  lines.push(
-    `//        3) implement static from() using the eval results  4) remove eslint-disable-next-line comments`,
-  )
-  lines.push(``)
-  lines.push(`import {`)
-  lines.push(`  ${parserName},`)
-  for (const t of nodeTypes) lines.push(`  type ${t},`)
-  lines.push(`} from '${modulePath}'`)
-  lines.push(`import { RDParserException } from '@configuredthings/rdp.js'`)
-  lines.push(``)
-  lines.push(`// ── Domain type ──────────────────────────────────────────────────────────────`)
-  lines.push(``)
-  lines.push(`/**`)
-  lines.push(` * Domain representation of a successfully parsed input.`)
-  lines.push(` *`)
-  lines.push(` * Replace the constructor stub with the fields that make sense for your domain.`)
-  lines.push(
-    ` * The private eval functions below produce the raw values; \`from()\` assembles them.`,
-  )
-  lines.push(` */`)
-  lines.push(`export class ${resultClass} {`)
-  lines.push(`  // TODO: define constructor fields`)
-  lines.push(`  constructor() {}`)
-  lines.push(``)
-  lines.push(`  /**`)
-  lines.push(`   * Build a {@link ${resultClass}} from the raw parse tree.`)
-  lines.push(`   *`)
-  lines.push(`   * Call the private eval functions to extract values, then construct.`)
-  lines.push(`   */`)
-  lines.push(`  // eslint-disable-next-line @typescript-eslint/no-unused-vars`)
-  lines.push(`  static from(tree: ${firstNodeType}): ${resultClass} {`)
-  lines.push(`    throw new Error('not implemented')`)
-  lines.push(`  }`)
-  lines.push(`}`)
-  lines.push(``)
-  lines.push(`/**`)
-  lines.push(` * Thrown by {@link ${entryFn}} when \`input\` does not match the grammar.`)
-  lines.push(` */`)
-  lines.push(`export class ${errorClass} extends Error {`)
-  lines.push(`  constructor(input: string) {`)
-  lines.push(`    super(\`invalid input: "\${input}"\`)`)
-  lines.push(`    this.name = '${errorClass}'`)
-  lines.push(`  }`)
-  lines.push(`}`)
-  lines.push(``)
-  lines.push(`// ── Public API ───────────────────────────────────────────────────────────────`)
-  lines.push(``)
-  lines.push(`/**`)
-  lines.push(` * Parse \`input\` and return a domain {@link ${resultClass}} object.`)
-  lines.push(` *`)
-  lines.push(` * @param input - Source string to parse.`)
-  lines.push(` * @returns A {@link ${resultClass}} representing the parsed input.`)
-  lines.push(` * @throws {@link ${errorClass}} If \`input\` does not match the grammar.`)
-  lines.push(` */`)
-  lines.push(`export function ${entryFn}(input: string): ${resultClass} {`)
-  lines.push(`  let tree: ${firstNodeType}`)
-  lines.push(`  try {`)
-  lines.push(`    tree = ${parserName}.parse(input)`)
-  lines.push(`  } catch (e) {`)
-  lines.push(`    if (e instanceof RDParserException) throw new ${errorClass}(input)`)
-  lines.push(`    throw e`)
-  lines.push(`  }`)
-  lines.push(`  return ${resultClass}.from(tree)`)
-  lines.push(`}`)
-  lines.push(``)
-  lines.push(`// ── Private ──────────────────────────────────────────────────────────────────`)
-
-  for (const rule of ast.rules) {
-    const nodeType = `${pascalCase(rule.name)}Node`
-    lines.push(``)
-    lines.push(`// eslint-disable-next-line @typescript-eslint/no-unused-vars`)
-    lines.push(`function eval${pascalCase(rule.name)}(node: ${nodeType}): unknown {`)
-    for (const hint of fieldHints(rule)) lines.push(`  // ${hint}`)
-    lines.push(`  throw new Error('not implemented')`)
-    lines.push(`}`)
+/** Private `walk()` + visitor template for facade/pipeline walker cases. */
+function walkerPrivateSection(ast: GrammarAST, ctx: ScaffoldCtx, header: string): Section {
+  const lines: string[] = [
+    `// eslint-disable-next-line @typescript-eslint/no-unused-vars`,
+    `function walk(root: ${ctx.treeName}, fn: (node: ${ctx.treeName}) => void): void {`,
+    `  fn(root)`,
+    `  for (const child of childNodes(root)) walk(child, fn)`,
+    `}`,
+    ``,
+    `// Add handlers for the node kinds you care about.`,
+    `// Use Required<Visitor<${ctx.treeName}>> to enforce that every kind is handled.`,
+    `//`,
+    `// const visitor: Visitor<${ctx.treeName}> = {`,
+    ...ast.rules.map((r) => `//   '${r.name}': (node) => { /* ... */ },`),
+    `// }`,
+    `//`,
+    `// walk(tree, (node) => visit(node, visitor))`,
+    ``,
+  ]
+  return {
+    header,
+    imports: [
+      { from: ctx.parserModule, names: ['childNodes', `type ${ctx.treeName}`] },
+      { from: '@configuredthings/rdp.js', names: ['visit', `type Visitor`] },
+    ],
+    lines,
   }
-
-  lines.push(``)
-  return lines.join('\n')
 }
 
-// ── Facade + tree-walker scaffold ────────────────────────────────────────────
+/** Domain result class (`XxxResult`) — body differs by traversal strategy. */
+function domainResultSection(ctx: ScaffoldCtx, strategy: Traversal): Section {
+  const fromBody =
+    strategy === Traversal.Interpreter
+      ? `    // Call the private eval functions to extract values, then construct.`
+      : `    // Use walk() and visitor to extract values, then construct.`
+  return {
+    header: '// ── Domain type ──────────────────────────────────────────────────────────────',
+    imports: [{ from: ctx.parserModule, names: [`type ${ctx.firstNodeType}`] }],
+    lines: [
+      `/**`,
+      ` * Domain representation of a successfully parsed input.`,
+      ` *`,
+      strategy === Traversal.Interpreter
+        ? ` * Replace the constructor stub with the fields that make sense for your domain.`
+        : ` * Replace the constructor stub with the fields for your domain.`,
+      strategy === Traversal.Interpreter
+        ? ` * The private eval functions below produce the raw values; \`from()\` assembles them.`
+        : ` * {@link ${ctx.resultClass}.from} walks the tree to build this object.`,
+      ` */`,
+      `export class ${ctx.resultClass} {`,
+      `  // TODO: define constructor fields`,
+      `  constructor() {}`,
+      ``,
+      `  /**`,
+      strategy === Traversal.Interpreter
+        ? `   * Build a {@link ${ctx.resultClass}} from the raw parse tree.`
+        : `   * Build a {@link ${ctx.resultClass}} by walking the parse tree.`,
+      `   */`,
+      `  // eslint-disable-next-line @typescript-eslint/no-unused-vars`,
+      `  static from(tree: ${ctx.firstNodeType}): ${ctx.resultClass} {`,
+      fromBody,
+      `    throw new Error('not implemented')`,
+      `  }`,
+      `}`,
+      ``,
+    ],
+  }
+}
 
-function generateFacadeWalkerScaffold(
+/** Error class (`XxxError`). */
+function errorSection(ctx: ScaffoldCtx): Section {
+  return {
+    header: null,
+    imports: [],
+    lines: [
+      `/**`,
+      ` * Thrown by the public API when \`input\` does not match the grammar`,
+      ` * or fails semantic validation.`,
+      ` */`,
+      `export class ${ctx.errorClass} extends Error {`,
+      `  constructor(input: string) {`,
+      `    super(\`invalid input: "\${input}"\`)`,
+      `    this.name = '${ctx.errorClass}'`,
+      `  }`,
+      `}`,
+      ``,
+    ],
+  }
+}
+
+/**
+ * Public API for facade patterns (interpreter and walker).
+ * When `hasPipeline` is true the body delegates to `XxxPipeline.run()`;
+ * otherwise it parses inline and calls `XxxResult.from()`.
+ */
+function facadePublicApiSection(ctx: ScaffoldCtx, hasPipeline: boolean): Section {
+  const body = hasPipeline
+    ? [`  return ${ctx.pipelineClass}.run(input)`]
+    : [
+        `  let tree: ${ctx.firstNodeType}`,
+        `  try {`,
+        `    tree = ${ctx.parserName}.parse(input)`,
+        `  } catch (e) {`,
+        `    if (e instanceof RDParserException) throw new ${ctx.errorClass}(input)`,
+        `    throw e`,
+        `  }`,
+        `  return ${ctx.resultClass}.from(tree)`,
+      ]
+  return {
+    header: '// ── Public API ───────────────────────────────────────────────────────────────',
+    imports: [
+      { from: ctx.parserModule, names: [ctx.parserName, `type ${ctx.firstNodeType}`] },
+      { from: '@configuredthings/rdp.js', names: ['RDParserException'] },
+    ],
+    lines: [
+      `/**`,
+      ` * Parse \`input\` and return a domain {@link ${ctx.resultClass}} object.`,
+      ` *`,
+      ` * @param input - Source string to parse.`,
+      ` * @returns A {@link ${ctx.resultClass}} representing the parsed input.`,
+      ` * @throws {@link ${ctx.errorClass}} If \`input\` does not match the grammar.`,
+      ` */`,
+      `export function ${ctx.entryFn}(input: string): ${ctx.resultClass} {`,
+      ...body,
+      `}`,
+      ``,
+    ],
+  }
+}
+
+/**
+ * Private `XxxPipeline` class with `#parse` / `#validate` / `#transform` stages.
+ * The `#transform` body is a stub for interpreter/walker; for json it calls `fromJSONAST`.
+ */
+function facadePipelineSection(
   ast: GrammarAST,
-  parserName: string,
-  treeName: string,
-): string {
-  const firstRule = ast.rules[0]
-  if (!firstRule) return ''
+  ctx: ScaffoldCtx,
+  strategy: typeof Traversal.TreeWalker | typeof Transformer.JSON,
+): Section {
+  const returnType = strategy === Transformer.JSON ? 'string' : ctx.resultClass
 
-  const base = stripParserSuffix(parserName)
-  const modulePath = `./${parserName}.js`
-  const firstNodeType = `${pascalCase(firstRule.name)}Node`
-  const resultClass = `${base}Result`
-  const errorClass = `${base}Error`
-  const entryFn = `parse${base}`
-  const lines: string[] = []
+  const transformBody =
+    strategy === Transformer.JSON
+      ? [`    return fromJSONAST(transform(tree, ${ctx.camelBase}ToJSON))`]
+      : [
+          `    // Use walk() and visitor to build the result, then return ${ctx.resultClass}.from(tree).`,
+          `    throw new Error('not implemented')`,
+        ]
 
-  lines.push(
-    `// Facade + tree-walker scaffold generated by rdp-gen — this file is not regenerated; edit freely.`,
-  )
-  lines.push(`// Steps: 1) define ${resultClass} fields  2) implement static from() using walk()`)
-  lines.push(
-    `//        3) uncomment and fill in the visitor  4) remove eslint-disable-next-line comments`,
-  )
-  lines.push(``)
-  lines.push(
-    `import { ${parserName}, childNodes, type ${treeName}, type ${firstNodeType} } from '${modulePath}'`,
-  )
-  lines.push(`import { RDParserException, visit, type Visitor } from '@configuredthings/rdp.js'`)
-  lines.push(``)
-  lines.push(`// ── Domain type ──────────────────────────────────────────────────────────────`)
-  lines.push(``)
-  lines.push(`/**`)
-  lines.push(` * Domain representation of a successfully parsed input.`)
-  lines.push(` *`)
-  lines.push(` * Replace the constructor stub with the fields for your domain.`)
-  lines.push(` * {@link ${resultClass}.from} walks the tree to build this object.`)
-  lines.push(` */`)
-  lines.push(`export class ${resultClass} {`)
-  lines.push(`  // TODO: define constructor fields`)
-  lines.push(`  constructor() {}`)
-  lines.push(``)
-  lines.push(`  /**`)
-  lines.push(`   * Build a {@link ${resultClass}} by walking the parse tree.`)
-  lines.push(`   */`)
-  lines.push(`  // eslint-disable-next-line @typescript-eslint/no-unused-vars`)
-  lines.push(`  static from(tree: ${firstNodeType}): ${resultClass} {`)
-  lines.push(`    // Use walk() and visitor to extract values, then construct.`)
-  lines.push(`    throw new Error('not implemented')`)
-  lines.push(`  }`)
-  lines.push(`}`)
-  lines.push(``)
-  lines.push(`/**`)
-  lines.push(` * Thrown by {@link ${entryFn}} when \`input\` does not match the grammar.`)
-  lines.push(` */`)
-  lines.push(`export class ${errorClass} extends Error {`)
-  lines.push(`  constructor(input: string) {`)
-  lines.push(`    super(\`invalid input: "\${input}"\`)`)
-  lines.push(`    this.name = '${errorClass}'`)
-  lines.push(`  }`)
-  lines.push(`}`)
-  lines.push(``)
-  lines.push(`// ── Public API ───────────────────────────────────────────────────────────────`)
-  lines.push(``)
-  lines.push(`/**`)
-  lines.push(` * Parse \`input\` and return a domain {@link ${resultClass}} object.`)
-  lines.push(` *`)
-  lines.push(` * @param input - Source string to parse.`)
-  lines.push(` * @returns A {@link ${resultClass}} representing the parsed input.`)
-  lines.push(` * @throws {@link ${errorClass}} If \`input\` does not match the grammar.`)
-  lines.push(` */`)
-  lines.push(`export function ${entryFn}(input: string): ${resultClass} {`)
-  lines.push(`  let tree: ${firstNodeType}`)
-  lines.push(`  try {`)
-  lines.push(`    tree = ${parserName}.parse(input)`)
-  lines.push(`  } catch (e) {`)
-  lines.push(`    if (e instanceof RDParserException) throw new ${errorClass}(input)`)
-  lines.push(`    throw e`)
-  lines.push(`  }`)
-  lines.push(`  return ${resultClass}.from(tree)`)
-  lines.push(`}`)
-  lines.push(``)
-  lines.push(`// ── Private ──────────────────────────────────────────────────────────────────`)
-  lines.push(``)
-  lines.push(`// eslint-disable-next-line @typescript-eslint/no-unused-vars`)
-  lines.push(`function walk(root: ${treeName}, fn: (node: ${treeName}) => void): void {`)
-  lines.push(`  fn(root)`)
-  lines.push(`  for (const child of childNodes(root)) walk(child, fn)`)
-  lines.push(`}`)
-  lines.push(``)
-  lines.push(`// Add handlers for the node kinds you care about.`)
-  lines.push(`// Use Required<Visitor<${treeName}>> to enforce that every kind is handled.`)
-  lines.push(`//`)
-  lines.push(`// const visitor: Visitor<${treeName}> = {`)
-  for (const rule of ast.rules) {
-    lines.push(`//   '${rule.name}': (node) => { /* ... */ },`)
+  const walkerCommentLines =
+    strategy === Traversal.TreeWalker
+      ? [
+          ``,
+          `// Add handlers for the node kinds you care about.`,
+          `//`,
+          `// const visitor: Visitor<${ctx.treeName}> = {`,
+          ...ast.rules.map((r) => `//   '${r.name}': (node) => { /* ... */ },`),
+          `// }`,
+        ]
+      : []
+
+  const rdpjsImports =
+    strategy === Transformer.JSON
+      ? ['RDParserException', 'transform', 'fromJSONAST']
+      : ['RDParserException', 'visit', `type Visitor`]
+
+  const parserImports =
+    strategy === Traversal.TreeWalker
+      ? [ctx.parserName, `type ${ctx.firstNodeType}`, 'childNodes', `type ${ctx.treeName}`]
+      : [ctx.parserName, `type ${ctx.firstNodeType}`]
+
+  return {
+    header: '// ── Pipeline (private) ───────────────────────────────────────────────────────',
+    imports: [
+      { from: ctx.parserModule, names: parserImports },
+      { from: '@configuredthings/rdp.js', names: rdpjsImports },
+    ],
+    lines: [
+      `class ${ctx.pipelineClass} {`,
+      `  static run(input: string): ${returnType} {`,
+      `    const tree   = ${ctx.pipelineClass}.#parse(input)`,
+      `    const result = ${ctx.pipelineClass}.#validate(tree)`,
+      `    if (!result.ok) throw new ${ctx.errorClass}(input)`,
+      `    return ${ctx.pipelineClass}.#transform(result.tree)`,
+      `  }`,
+      ``,
+      `  static #parse(input: string): ${ctx.firstNodeType} {`,
+      `    try {`,
+      `      return ${ctx.parserName}.parse(input)`,
+      `    } catch (e) {`,
+      `      if (e instanceof RDParserException) throw new ${ctx.errorClass}(input)`,
+      `      throw e`,
+      `    }`,
+      `  }`,
+      ``,
+      `  // eslint-disable-next-line @typescript-eslint/no-unused-vars`,
+      `  static #validate(`,
+      `    tree: ${ctx.firstNodeType},`,
+      `  ): { ok: true; tree: ${ctx.firstNodeType} } | { ok: false } {`,
+      `    // TODO: add semantic validation; return { ok: false } to reject`,
+      `    return { ok: true, tree }`,
+      `  }`,
+      ``,
+      `  // eslint-disable-next-line @typescript-eslint/no-unused-vars`,
+      `  static #transform(tree: ${ctx.firstNodeType}): ${returnType} {`,
+      ...transformBody,
+      `  }`,
+      `}`,
+      ...walkerCommentLines,
+      ``,
+    ],
   }
-  lines.push(`// }`)
-  lines.push(`//`)
-  lines.push(`// walk(tree, (node) => visit(node, visitor))`)
-  lines.push(``)
-
-  return lines.join('\n')
 }
 
-// ── Facade + pipeline scaffold ────────────────────────────────────────────────
-
-function generateFacadePipelineScaffold(
-  ast: GrammarAST,
-  parserName: string,
-  transformInner: 'interpreter' | 'tree-walker',
-  treeName?: string,
-): string {
-  const firstRule = ast.rules[0]
-  if (!firstRule) return ''
-
-  const base = stripParserSuffix(parserName)
-  const modulePath = `./${parserName}.js`
-  const nodeTypes = ast.rules.map((r) => `${pascalCase(r.name)}Node`)
-  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-  const firstNodeType = nodeTypes[0]!
-  const resultClass = `${base}Result`
-  const errorClass = `${base}Error`
-  const pipelineClass = `${base}Pipeline`
-  const entryFn = `parse${base}`
-  const resolvedTreeName = treeName ?? 'ParseTree'
-  const lines: string[] = []
-
-  const innerLabel =
-    transformInner === 'interpreter' ? 'pipeline:interpreter' : 'pipeline:tree-walker'
-  lines.push(
-    `// Facade + ${innerLabel} scaffold generated by rdp-gen — this file is not regenerated; edit freely.`,
-  )
-  lines.push(`// Steps: 1) define ${resultClass} fields  2) fill in #validate and #transform`)
-  lines.push(
-    `//        3) implement ${resultClass}.from()  4) remove eslint-disable-next-line comments`,
-  )
-  lines.push(``)
-
-  // Imports: interpreter needs all node types for the private eval functions;
-  // tree-walker only needs the root node type plus childNodes/ParseTree.
-  if (transformInner === 'interpreter') {
-    lines.push(`import {`)
-    lines.push(`  ${parserName},`)
-    for (const t of nodeTypes) lines.push(`  type ${t},`)
-    lines.push(`} from '${modulePath}'`)
-    lines.push(`import { RDParserException } from '@configuredthings/rdp.js'`)
-  } else {
-    lines.push(
-      `import { ${parserName}, childNodes, type ${resolvedTreeName}, type ${firstNodeType} } from '${modulePath}'`,
-    )
-    lines.push(`import { RDParserException, visit, type Visitor } from '@configuredthings/rdp.js'`)
+/** Result interface + ValidationError interface for the standalone pipeline walker. */
+function pipelineTypesSection(ctx: ScaffoldCtx): Section {
+  return {
+    header: '// ── Types ────────────────────────────────────────────────────────────────────',
+    imports: [],
+    lines: [
+      `/**`,
+      ` * Domain representation produced by the final pipeline stage.`,
+      ` *`,
+      ` * Replace this empty interface with the fields you want {@link transform} to return.`,
+      ` */`,
+      `// eslint-disable-next-line @typescript-eslint/no-empty-object-type`,
+      `export interface ${ctx.resultClass} {`,
+      `  // TODO: define your domain type`,
+      `}`,
+      ``,
+      `/**`,
+      ` * A single semantic error found during {@link validate}.`,
+      ` */`,
+      `export interface ValidationError {`,
+      `  message: string`,
+      `}`,
+      ``,
+    ],
   }
-
-  lines.push(``)
-  lines.push(`// ── Domain type ──────────────────────────────────────────────────────────────`)
-  lines.push(``)
-  lines.push(`/**`)
-  lines.push(` * Domain representation of a successfully parsed input.`)
-  lines.push(` *`)
-  lines.push(` * Replace the constructor stub with your domain fields.`)
-  lines.push(` * {@link ${pipelineClass}} builds this via \`from()\`.`)
-  lines.push(` */`)
-  lines.push(`export class ${resultClass} {`)
-  lines.push(`  // TODO: define constructor fields`)
-  lines.push(`  constructor() {}`)
-  lines.push(``)
-  lines.push(`  /**`)
-  lines.push(`   * Build a {@link ${resultClass}} from the validated parse tree.`)
-  lines.push(`   */`)
-  lines.push(`  // eslint-disable-next-line @typescript-eslint/no-unused-vars`)
-  lines.push(`  static from(tree: ${firstNodeType}): ${resultClass} {`)
-  lines.push(`    throw new Error('not implemented')`)
-  lines.push(`  }`)
-  lines.push(`}`)
-  lines.push(``)
-  lines.push(`/**`)
-  lines.push(` * Thrown by {@link ${entryFn}} when \`input\` does not match the grammar`)
-  lines.push(` * or fails semantic validation.`)
-  lines.push(` */`)
-  lines.push(`export class ${errorClass} extends Error {`)
-  lines.push(`  constructor(input: string) {`)
-  lines.push(`    super(\`invalid input: "\${input}"\`)`)
-  lines.push(`    this.name = '${errorClass}'`)
-  lines.push(`  }`)
-  lines.push(`}`)
-  lines.push(``)
-  lines.push(`// ── Public API ───────────────────────────────────────────────────────────────`)
-  lines.push(``)
-  lines.push(`/**`)
-  lines.push(` * Parse \`input\` and return a domain {@link ${resultClass}} object.`)
-  lines.push(` *`)
-  lines.push(` * @param input - Source string to parse.`)
-  lines.push(` * @returns A {@link ${resultClass}} representing the parsed input.`)
-  lines.push(
-    ` * @throws {@link ${errorClass}} If \`input\` does not match the grammar or is invalid.`,
-  )
-  lines.push(` */`)
-  lines.push(`export function ${entryFn}(input: string): ${resultClass} {`)
-  lines.push(`  return ${pipelineClass}.run(input)`)
-  lines.push(`}`)
-  lines.push(``)
-  lines.push(`// ── Pipeline (private) ───────────────────────────────────────────────────────`)
-  lines.push(``)
-  lines.push(`class ${pipelineClass} {`)
-  lines.push(`  static run(input: string): ${resultClass} {`)
-  lines.push(`    const tree   = ${pipelineClass}.#parse(input)`)
-  lines.push(`    const result = ${pipelineClass}.#validate(tree)`)
-  lines.push(`    if (!result.ok) throw new ${errorClass}(input)`)
-  lines.push(`    return ${pipelineClass}.#transform(result.tree)`)
-  lines.push(`  }`)
-  lines.push(``)
-  lines.push(`  static #parse(input: string): ${firstNodeType} {`)
-  lines.push(`    try {`)
-  lines.push(`      return ${parserName}.parse(input)`)
-  lines.push(`    } catch (e) {`)
-  lines.push(`      if (e instanceof RDParserException) throw new ${errorClass}(input)`)
-  lines.push(`      throw e`)
-  lines.push(`    }`)
-  lines.push(`  }`)
-  lines.push(``)
-  lines.push(`  // eslint-disable-next-line @typescript-eslint/no-unused-vars`)
-  lines.push(`  static #validate(`)
-  lines.push(`    tree: ${firstNodeType},`)
-  lines.push(`  ): { ok: true; tree: ${firstNodeType} } | { ok: false } {`)
-  lines.push(`    // TODO: add semantic validation; return { ok: false } to reject`)
-  lines.push(`    return { ok: true, tree }`)
-  lines.push(`  }`)
-  lines.push(``)
-  lines.push(`  // eslint-disable-next-line @typescript-eslint/no-unused-vars`)
-  lines.push(`  static #transform(tree: ${firstNodeType}): ${resultClass} {`)
-
-  if (transformInner === 'interpreter') {
-    lines.push(`    // Call ${resultClass}.from(tree) once from() is implemented, or`)
-    lines.push(`    // use the private eval functions below to assemble the result.`)
-    lines.push(`    throw new Error('not implemented')`)
-  } else {
-    lines.push(
-      `    // Use walk() and visitor to build the result, then return ${resultClass}.from(tree).`,
-    )
-    lines.push(`    throw new Error('not implemented')`)
-  }
-
-  lines.push(`  }`)
-  lines.push(`}`)
-
-  if (transformInner === 'interpreter') {
-    lines.push(``)
-    lines.push(`// ── Private eval functions ───────────────────────────────────────────────────`)
-    for (const rule of ast.rules) {
-      const nodeType = `${pascalCase(rule.name)}Node`
-      lines.push(``)
-      lines.push(`// eslint-disable-next-line @typescript-eslint/no-unused-vars`)
-      lines.push(`function eval${pascalCase(rule.name)}(node: ${nodeType}): unknown {`)
-      for (const hint of fieldHints(rule)) lines.push(`  // ${hint}`)
-      lines.push(`  throw new Error('not implemented')`)
-      lines.push(`}`)
-    }
-  } else {
-    lines.push(``)
-    lines.push(`// ── Private walk utilities ───────────────────────────────────────────────────`)
-    lines.push(``)
-    lines.push(`// eslint-disable-next-line @typescript-eslint/no-unused-vars`)
-    lines.push(
-      `function walk(root: ${resolvedTreeName}, fn: (node: ${resolvedTreeName}) => void): void {`,
-    )
-    lines.push(`  fn(root)`)
-    lines.push(`  for (const child of childNodes(root)) walk(child, fn)`)
-    lines.push(`}`)
-    lines.push(``)
-    lines.push(`// Add handlers for the node kinds you care about.`)
-    lines.push(`//`)
-    lines.push(`// const visitor: Visitor<${resolvedTreeName}> = {`)
-    for (const rule of ast.rules) {
-      lines.push(`//   '${rule.name}': (node) => { /* ... */ },`)
-    }
-    lines.push(`// }`)
-  }
-
-  lines.push(``)
-  return lines.join('\n')
 }
 
-// ── Pipeline + tree-walker scaffold ──────────────────────────────────────────
-
-function generatePipelineWalkerScaffold(
-  ast: GrammarAST,
-  parserName: string,
-  treeName: string,
-): string {
-  const firstRule = ast.rules[0]
-  if (!firstRule) return ''
-
-  const base = stripParserSuffix(parserName)
-  const modulePath = `./${parserName}.js`
-  const firstNodeType = `${pascalCase(firstRule.name)}Node`
-  const resultType = `${base}Result`
-  const loadFn = `load${base}`
-  const lines: string[] = []
-
-  lines.push(
-    `// Pipeline + tree-walker scaffold generated by rdp-gen — this file is not regenerated; edit freely.`,
-  )
-  lines.push(
-    `// Steps: 1) define ${resultType} fields  2) fill in validate()  3) fill in the visitor inside transform()`,
-  )
-  lines.push(`//        4) remove eslint-disable-next-line comments`)
-  lines.push(``)
-  lines.push(
-    `import { ${parserName}, childNodes, type ${treeName}, type ${firstNodeType} } from '${modulePath}'`,
-  )
-  lines.push(`import { RDParserException, visit, type Visitor } from '@configuredthings/rdp.js'`)
-  lines.push(``)
-  lines.push(`// ── Types ────────────────────────────────────────────────────────────────────`)
-  lines.push(``)
-  lines.push(`/**`)
-  lines.push(` * Domain representation produced by the final pipeline stage.`)
-  lines.push(` *`)
-  lines.push(
-    ` * Replace this empty interface with the fields you want {@link transform} to return.`,
-  )
-  lines.push(` */`)
-  lines.push(`// eslint-disable-next-line @typescript-eslint/no-empty-object-type`)
-  lines.push(`export interface ${resultType} {`)
-  lines.push(`  // TODO: define your domain type`)
-  lines.push(`}`)
-  lines.push(``)
-  lines.push(`/**`)
-  lines.push(` * A single semantic error found during {@link validate}.`)
-  lines.push(` */`)
-  lines.push(`export interface ValidationError {`)
-  lines.push(`  message: string`)
-  lines.push(`}`)
-  lines.push(``)
-  lines.push(`// ── Stage 1: parse ───────────────────────────────────────────────────────────`)
-  lines.push(``)
-  lines.push(`/**`)
-  lines.push(` * Stage 1 — parse \`input\` into a typed parse tree.`)
-  lines.push(` *`)
-  lines.push(` * @param input - Source string to parse.`)
-  lines.push(` * @returns The root {@link ${firstNodeType}} of the parse tree.`)
-  lines.push(` * @throws {SyntaxError} If \`input\` does not match the grammar.`)
-  lines.push(` */`)
-  lines.push(`export function parse(input: string): ${firstNodeType} {`)
-  lines.push(`  try {`)
-  lines.push(`    return ${parserName}.parse(input)`)
-  lines.push(`  } catch (e) {`)
-  lines.push(`    if (e instanceof RDParserException) throw new SyntaxError(e.message)`)
-  lines.push(`    throw e`)
-  lines.push(`  }`)
-  lines.push(`}`)
-  lines.push(``)
-  lines.push(`// ── Stage 2: validate ────────────────────────────────────────────────────────`)
-  lines.push(``)
-  lines.push(`/**`)
-  lines.push(` * Stage 2 — check the parse tree for semantic errors.`)
-  lines.push(` *`)
-  lines.push(` * @param tree - Parse tree returned by {@link parse}.`)
-  lines.push(
+/** Exported `parse` / `validate` / `transform` + `loadXxx` for the standalone pipeline walker. */
+function pipelineStagesSection(ast: GrammarAST, ctx: ScaffoldCtx): Section {
+  const lines: string[] = [
+    `// ── Stage 1: parse ───────────────────────────────────────────────────────────`,
+    ``,
+    `/**`,
+    ` * Stage 1 — parse \`input\` into a typed parse tree.`,
+    ` *`,
+    ` * @param input - Source string to parse.`,
+    ` * @returns The root {@link ${ctx.firstNodeType}} of the parse tree.`,
+    ` * @throws {SyntaxError} If \`input\` does not match the grammar.`,
+    ` */`,
+    `export function parse(input: string): ${ctx.firstNodeType} {`,
+    `  try {`,
+    `    return ${ctx.parserName}.parse(input)`,
+    `  } catch (e) {`,
+    `    if (e instanceof RDParserException) throw new SyntaxError(e.message)`,
+    `    throw e`,
+    `  }`,
+    `}`,
+    ``,
+    `// ── Stage 2: validate ────────────────────────────────────────────────────────`,
+    ``,
+    `/**`,
+    ` * Stage 2 — check the parse tree for semantic errors.`,
+    ` *`,
+    ` * @param tree - Parse tree returned by {@link parse}.`,
     ` * @returns \`{ ok: true, tree }\` when valid, or \`{ ok: false, errors }\` otherwise.`,
-  )
-  lines.push(` */`)
-  lines.push(`export function validate(`)
-  lines.push(`  tree: ${firstNodeType},`)
-  lines.push(`): { ok: true; tree: ${firstNodeType} } | { ok: false; errors: ValidationError[] } {`)
-  lines.push(`  const errors: ValidationError[] = []`)
-  lines.push(`  // TODO: add validation logic`)
-  lines.push(`  return errors.length > 0 ? { ok: false, errors } : { ok: true, tree }`)
-  lines.push(`}`)
-  lines.push(``)
-  lines.push(`// ── Stage 3: transform ───────────────────────────────────────────────────────`)
-  lines.push(``)
-  lines.push(`/**`)
-  lines.push(
-    ` * Stage 3 — convert the validated parse tree into a domain {@link ${resultType}} object.`,
-  )
-  lines.push(` *`)
-  lines.push(` * @param tree - Validated parse tree from {@link validate}.`)
-  lines.push(` * @returns The domain object.`)
-  lines.push(` */`)
-  lines.push(`// eslint-disable-next-line @typescript-eslint/no-unused-vars`)
-  lines.push(`export function transform(tree: ${firstNodeType}): ${resultType} {`)
-  lines.push(`  // Use walk() and visitor to collect values, then construct ${resultType}.`)
-  lines.push(`  throw new Error('not implemented')`)
-  lines.push(`}`)
-  lines.push(``)
-  lines.push(`// ── Combinator ───────────────────────────────────────────────────────────────`)
-  lines.push(``)
-  lines.push(`/**`)
-  lines.push(` * Parse, validate, and transform \`input\` in one call.`)
-  lines.push(` *`)
-  lines.push(` * @param input - Source string to load.`)
-  lines.push(` * @returns The domain object.`)
-  lines.push(` * @throws {SyntaxError} If \`input\` does not match the grammar.`)
-  lines.push(` * @throws {AggregateError} If \`input\` fails semantic validation.`)
-  lines.push(` */`)
-  lines.push(`export function ${loadFn}(input: string): ${resultType} {`)
-  lines.push(`  const tree   = parse(input)`)
-  lines.push(`  const result = validate(tree)`)
-  lines.push(
-    `  if (!result.ok) throw new AggregateError(result.errors, \`invalid ${base}: "\${input}"\`)`,
-  )
-  lines.push(`  return transform(result.tree)`)
-  lines.push(`}`)
-  lines.push(``)
-  lines.push(`// ── Private walk utilities ───────────────────────────────────────────────────`)
-  lines.push(``)
-  lines.push(`// eslint-disable-next-line @typescript-eslint/no-unused-vars`)
-  lines.push(`function walk(root: ${treeName}, fn: (node: ${treeName}) => void): void {`)
-  lines.push(`  fn(root)`)
-  lines.push(`  for (const child of childNodes(root)) walk(child, fn)`)
-  lines.push(`}`)
-  lines.push(``)
-  lines.push(`// Add handlers for the node kinds you care about.`)
-  lines.push(`//`)
-  lines.push(`// const visitor: Visitor<${treeName}> = {`)
-  for (const rule of ast.rules) {
-    lines.push(`//   '${rule.name}': (node) => { /* ... */ },`)
+    ` */`,
+    `export function validate(`,
+    `  tree: ${ctx.firstNodeType},`,
+    `): { ok: true; tree: ${ctx.firstNodeType} } | { ok: false; errors: ValidationError[] } {`,
+    `  const errors: ValidationError[] = []`,
+    `  // TODO: add validation logic`,
+    `  return errors.length > 0 ? { ok: false, errors } : { ok: true, tree }`,
+    `}`,
+    ``,
+    `// ── Stage 3: transform ───────────────────────────────────────────────────────`,
+    ``,
+    `/**`,
+    ` * Stage 3 — convert the validated parse tree into a domain {@link ${ctx.resultClass}} object.`,
+    ` *`,
+    ` * @param tree - Validated parse tree from {@link validate}.`,
+    ` * @returns The domain object.`,
+    ` */`,
+    `// eslint-disable-next-line @typescript-eslint/no-unused-vars`,
+    `export function transform(tree: ${ctx.firstNodeType}): ${ctx.resultClass} {`,
+    `  // Use walk() and visitor to collect values, then construct ${ctx.resultClass}.`,
+    `  throw new Error('not implemented')`,
+    `}`,
+    ``,
+    `// ── Combinator ───────────────────────────────────────────────────────────────`,
+    ``,
+    `/**`,
+    ` * Parse, validate, and transform \`input\` in one call.`,
+    ` *`,
+    ` * @param input - Source string to load.`,
+    ` * @returns The domain object.`,
+    ` * @throws {SyntaxError} If \`input\` does not match the grammar.`,
+    ` * @throws {AggregateError} If \`input\` fails semantic validation.`,
+    ` */`,
+    `export function ${ctx.loadFn}(input: string): ${ctx.resultClass} {`,
+    `  const tree   = parse(input)`,
+    `  const result = validate(tree)`,
+    `  if (!result.ok) throw new AggregateError(result.errors, \`invalid ${ctx.base}: "\${input}"\`)`,
+    `  return transform(result.tree)`,
+    `}`,
+    ``,
+  ]
+  return {
+    header: null,
+    imports: [
+      {
+        from: ctx.parserModule,
+        names: [ctx.parserName, 'childNodes', `type ${ctx.treeName}`, `type ${ctx.firstNodeType}`],
+      },
+      { from: '@configuredthings/rdp.js', names: ['RDParserException', 'visit', `type Visitor`] },
+    ],
+    lines,
   }
-  lines.push(`// }`)
-  lines.push(``)
-
-  return lines.join('\n')
 }
 
-// ── Transformer scaffold ──────────────────────────────────────────────────────
-
-function generateTransformerScaffold(
-  ast: GrammarAST,
-  parserName: string,
-  treeName: string,
-): string {
-  const firstRule = ast.rules[0]
-  if (!firstRule) return ''
-
-  const base = stripParserSuffix(parserName)
-  const camelBase = base.charAt(0).toLowerCase() + base.slice(1)
-  const modulePath = `./${parserName}.js`
-  const nodeTypes = ast.rules.map((r) => `${pascalCase(r.name)}Node`)
-  const lines: string[] = []
-
-  lines.push(
-    `// Transformer scaffold generated by rdp-gen — this file is not regenerated; edit freely.`,
-  )
-  lines.push(
-    `// Steps: 1) replace 'unknown' with your concrete return type  2) fill in the handlers`,
-  )
-  lines.push(
-    `//        3) remove eslint-disable-next-line comments — present only to keep stubs lint-clean`,
-  )
-  lines.push(``)
-  lines.push(`import {`)
-  lines.push(`  ${parserName},`)
-  for (const t of nodeTypes) lines.push(`  type ${t},`)
-  lines.push(`  type ${treeName},`)
-  lines.push(`} from '${modulePath}'`)
-  lines.push(`import { transform, type Transformer } from '@configuredthings/rdp.js'`)
-  lines.push(``)
-  lines.push(`// eslint-disable-next-line @typescript-eslint/no-unused-vars`)
-  lines.push(`export const ${camelBase}Transformer: Transformer<${treeName}, unknown> = {`)
-
+/** Standard `Transformer<Tree, unknown>` object + `transformXxx()` entry point. */
+function standardTransformerSection(ast: GrammarAST, ctx: ScaffoldCtx): Section {
+  const lines: string[] = [
+    `// eslint-disable-next-line @typescript-eslint/no-unused-vars`,
+    `export const ${ctx.camelBase}Transformer: Transformer<${ctx.treeName}, unknown> = {`,
+  ]
   for (const rule of ast.rules) {
     const nodeType = `${pascalCase(rule.name)}Node`
     lines.push(``)
@@ -803,62 +769,42 @@ function generateTransformerScaffold(
     lines.push(`    throw new Error('not implemented')`)
     lines.push(`  },`)
   }
-
-  lines.push(`}`)
-  lines.push(``)
-  lines.push(`/**`)
-  lines.push(` * Parse \`input\` and transform it in one call.`)
-  lines.push(` *`)
-  lines.push(` * @param input - Source string to parse and transform.`)
-  lines.push(` * @returns The transformed result.`)
-  lines.push(` */`)
-  lines.push(`// eslint-disable-next-line @typescript-eslint/no-unused-vars`)
-  lines.push(`export function transform${base}(input: string): unknown {`)
-  lines.push(`  return transform(${parserName}.parse(input), ${camelBase}Transformer)`)
-  lines.push(`}`)
-  lines.push(``)
-
-  return lines.join('\n')
+  lines.push(
+    `}`,
+    ``,
+    `/**`,
+    ` * Parse \`input\` and transform it in one call.`,
+    ` *`,
+    ` * @param input - Source string to parse and transform.`,
+    ` * @returns The transformed result.`,
+    ` */`,
+    `// eslint-disable-next-line @typescript-eslint/no-unused-vars`,
+    `export function transform${ctx.base}(input: string): unknown {`,
+    `  return transform(${ctx.parserName}.parse(input), ${ctx.camelBase}Transformer)`,
+    `}`,
+    ``,
+  )
+  return {
+    header: null,
+    imports: [
+      {
+        from: ctx.parserModule,
+        names: [ctx.parserName, ...ctx.nodeTypes.map((t) => `type ${t}`), `type ${ctx.treeName}`],
+      },
+      { from: '@configuredthings/rdp.js', names: ['transform', `type Transformer`] },
+    ],
+    lines,
+  }
 }
 
-// ── JSON transformer scaffold ─────────────────────────────────────────────────
-
-function generateJsonTransformerScaffold(
-  ast: GrammarAST,
-  parserName: string,
-  treeName: string,
-): string {
-  const firstRule = ast.rules[0]
-  if (!firstRule) return ''
-
-  const base = stripParserSuffix(parserName)
-  const camelBase = base.charAt(0).toLowerCase() + base.slice(1)
-  const modulePath = `./${parserName}.js`
-  const nodeTypes = ast.rules.map((r) => `${pascalCase(r.name)}Node`)
-  const lines: string[] = []
-
-  lines.push(
-    `// JSON transformer scaffold generated by rdp-gen — this file is not regenerated; edit freely.`,
-  )
-  lines.push(`// Steps: 1) fill in ${camelBase}ToJSON handlers  2) fill in jsonTo${base} handlers`)
-  lines.push(
-    `//        3) remove eslint-disable-next-line comments — present only to keep stubs lint-clean`,
-  )
-  lines.push(``)
-  lines.push(`import {`)
-  lines.push(`  ${parserName},`)
-  for (const t of nodeTypes) lines.push(`  type ${t},`)
-  lines.push(`  type ${treeName},`)
-  lines.push(`} from '${modulePath}'`)
-  lines.push(
-    `import { transform, type Transformer, toJSONAST, fromJSONAST, type JSONAST } from '@configuredthings/rdp.js'`,
-  )
-  lines.push(``)
-  lines.push(`// ── ${base} → JSON ──────────────────────────────────────────────────────────────`)
-  lines.push(``)
-  lines.push(`// eslint-disable-next-line @typescript-eslint/no-unused-vars`)
-  lines.push(`export const ${camelBase}ToJSON: Transformer<${treeName}, JSONAST> = {`)
-
+/** Two-way JSON transformer stubs (`xxxToJSON` and `jsonToXxx`). */
+function jsonTransformerSection(ast: GrammarAST, ctx: ScaffoldCtx): Section {
+  const lines: string[] = [
+    `// ── ${ctx.base} → JSON ──────────────────────────────────────────────────────────────`,
+    ``,
+    `// eslint-disable-next-line @typescript-eslint/no-unused-vars`,
+    `export const ${ctx.camelBase}ToJSON: Transformer<${ctx.treeName}, JSONAST> = {`,
+  ]
   for (const rule of ast.rules) {
     const nodeType = `${pascalCase(rule.name)}Node`
     lines.push(``)
@@ -868,57 +814,395 @@ function generateJsonTransformerScaffold(
     lines.push(`    throw new Error('not implemented')`)
     lines.push(`  },`)
   }
+  lines.push(
+    `}`,
+    ``,
+    `// ── JSON → ${ctx.base} ──────────────────────────────────────────────────────────────`,
+    ``,
+    `// eslint-disable-next-line @typescript-eslint/no-unused-vars`,
+    `export const jsonTo${ctx.base}: Transformer<JSONAST, string> = {`,
+    ``,
+    `  // eslint-disable-next-line @typescript-eslint/no-unused-vars`,
+    `  string(node): string { throw new Error('not implemented') },`,
+    ``,
+    `  // eslint-disable-next-line @typescript-eslint/no-unused-vars`,
+    `  number(node): string { throw new Error('not implemented') },`,
+    ``,
+    `  // eslint-disable-next-line @typescript-eslint/no-unused-vars`,
+    `  boolean(node): string { throw new Error('not implemented') },`,
+    ``,
+    `  // eslint-disable-next-line @typescript-eslint/no-unused-vars`,
+    `  null(node): string { throw new Error('not implemented') },`,
+    ``,
+    `  // eslint-disable-next-line @typescript-eslint/no-unused-vars`,
+    `  array(node): string { throw new Error('not implemented') },`,
+    ``,
+    `  // eslint-disable-next-line @typescript-eslint/no-unused-vars`,
+    `  object(node): string { throw new Error('not implemented') },`,
+    `}`,
+    ``,
+  )
+  return {
+    header: null,
+    imports: [
+      {
+        from: ctx.parserModule,
+        names: [ctx.parserName, ...ctx.nodeTypes.map((t) => `type ${t}`), `type ${ctx.treeName}`],
+      },
+      {
+        from: '@configuredthings/rdp.js',
+        names: ['transform', `type Transformer`, 'toJSONAST', 'fromJSONAST', `type JSONAST`],
+      },
+    ],
+    lines,
+  }
+}
 
-  lines.push(`}`)
-  lines.push(``)
-  lines.push(`// ── JSON → ${base} ──────────────────────────────────────────────────────────────`)
-  lines.push(``)
-  lines.push(`// eslint-disable-next-line @typescript-eslint/no-unused-vars`)
-  lines.push(`export const jsonTo${base}: Transformer<JSONAST, string> = {`)
-  lines.push(``)
-  lines.push(`  // eslint-disable-next-line @typescript-eslint/no-unused-vars`)
-  lines.push(`  string(node): string { throw new Error('not implemented') },`)
-  lines.push(``)
-  lines.push(`  // eslint-disable-next-line @typescript-eslint/no-unused-vars`)
-  lines.push(`  number(node): string { throw new Error('not implemented') },`)
-  lines.push(``)
-  lines.push(`  // eslint-disable-next-line @typescript-eslint/no-unused-vars`)
-  lines.push(`  boolean(node): string { throw new Error('not implemented') },`)
-  lines.push(``)
-  lines.push(`  // eslint-disable-next-line @typescript-eslint/no-unused-vars`)
-  lines.push(`  null(node): string { throw new Error('not implemented') },`)
-  lines.push(``)
-  lines.push(`  // eslint-disable-next-line @typescript-eslint/no-unused-vars`)
-  lines.push(`  array(node): string { throw new Error('not implemented') },`)
-  lines.push(``)
-  lines.push(`  // eslint-disable-next-line @typescript-eslint/no-unused-vars`)
-  lines.push(`  object(node): string { throw new Error('not implemented') },`)
-  lines.push(`}`)
-  lines.push(``)
-  lines.push(`// ── Round-trip helpers ───────────────────────────────────────────────────────`)
-  lines.push(``)
-  lines.push(`/**`)
-  lines.push(` * Parse \`input\` as ${base} format and serialise the result to a JSON string.`)
-  lines.push(` *`)
-  lines.push(` * @param input - Source string in ${base} format.`)
-  lines.push(` * @returns A JSON string.`)
-  lines.push(` */`)
-  lines.push(`export function ${camelBase}ToJSONString(input: string): string {`)
-  lines.push(`  return fromJSONAST(transform(${parserName}.parse(input), ${camelBase}ToJSON))`)
-  lines.push(`}`)
-  lines.push(``)
-  lines.push(`/**`)
-  lines.push(` * Parse \`input\` as a JSON string and emit it in ${base} format.`)
-  lines.push(` *`)
-  lines.push(` * @param input - A valid JSON string.`)
-  lines.push(` * @returns A string in ${base} format.`)
-  lines.push(` */`)
-  lines.push(`export function jsonStringTo${base}(input: string): string {`)
-  lines.push(`  return transform(toJSONAST(input), jsonTo${base})`)
-  lines.push(`}`)
-  lines.push(``)
+/**
+ * Round-trip helper functions for JSON transformer.
+ * When `hasPipeline` is true, `xxxToJSONString` delegates to `XxxPipeline.run()`.
+ */
+function jsonPublicApiSection(ctx: ScaffoldCtx, hasPipeline: boolean): Section {
+  const toJSONBody = hasPipeline
+    ? `  return ${ctx.pipelineClass}.run(input)`
+    : `  return fromJSONAST(transform(${ctx.parserName}.parse(input), ${ctx.camelBase}ToJSON))`
 
-  return lines.join('\n')
+  const toJSONThrows = hasPipeline
+    ? [
+        ` * @throws {@link ${ctx.errorClass}} If \`input\` does not match the grammar or is invalid.`,
+      ]
+    : []
+
+  const lines: string[] = [
+    `/**`,
+    ` * Parse \`input\` as ${ctx.base} format and serialise the result to a JSON string.`,
+    ` *`,
+    ` * @param input - Source string in ${ctx.base} format.`,
+    ` * @returns A JSON string.`,
+    ...toJSONThrows,
+    ` */`,
+    `export function ${ctx.camelBase}ToJSONString(input: string): string {`,
+    toJSONBody,
+    `}`,
+    ``,
+    `/**`,
+    ` * Parse \`input\` as a JSON string and emit it in ${ctx.base} format.`,
+    ` *`,
+    ` * @param input - A valid JSON string.`,
+    ` * @returns A string in ${ctx.base} format.`,
+    ` */`,
+    `export function jsonStringTo${ctx.base}(input: string): string {`,
+    `  return transform(toJSONAST(input), jsonTo${ctx.base})`,
+    `}`,
+    ``,
+  ]
+  return {
+    header: hasPipeline
+      ? '// ── Public API ───────────────────────────────────────────────────────────────'
+      : '// ── Round-trip helpers ───────────────────────────────────────────────────────',
+    imports: hasPipeline
+      ? [{ from: '@configuredthings/rdp.js', names: ['RDParserException'] }]
+      : [],
+    lines,
+  }
+}
+
+/** Private `XxxPipeline` class for the facade+pipeline+json pattern. */
+function jsonPipelineSection(ast: GrammarAST, ctx: ScaffoldCtx): Section {
+  return facadePipelineSection(ast, ctx, 'json')
+}
+
+// ── Multi-file split sections ─────────────────────────────────────────────────
+
+/**
+ * Exported `XxxPipeline` class for the split facade+pipeline+json pattern.
+ * Lives in its own file; imports `xxxToJSON` from the transformer artifact.
+ */
+function splitJsonPipelineSection(ctx: ScaffoldCtx): Section {
+  return {
+    header: '// ── Pipeline ────────────────────────────────────────────────────────────────',
+    imports: [
+      { from: ctx.parserModule, names: [ctx.parserName, `type ${ctx.firstNodeType}`] },
+      { from: ctx.transformerModule, names: [`${ctx.camelBase}ToJSON`] },
+      {
+        from: '@configuredthings/rdp.js',
+        names: ['RDParserException', 'transform', 'fromJSONAST'],
+      },
+    ],
+    lines: [
+      `export class ${ctx.pipelineClass} {`,
+      `  static run(input: string): string {`,
+      `    const tree   = ${ctx.pipelineClass}.#parse(input)`,
+      `    const result = ${ctx.pipelineClass}.#validate(tree)`,
+      `    if (!result.ok) throw new ${ctx.errorClass}(input)`,
+      `    return ${ctx.pipelineClass}.#transform(result.tree)`,
+      `  }`,
+      ``,
+      `  static #parse(input: string): ${ctx.firstNodeType} {`,
+      `    try {`,
+      `      return ${ctx.parserName}.parse(input)`,
+      `    } catch (e) {`,
+      `      if (e instanceof RDParserException) throw new ${ctx.errorClass}(input)`,
+      `      throw e`,
+      `    }`,
+      `  }`,
+      ``,
+      `  // eslint-disable-next-line @typescript-eslint/no-unused-vars`,
+      `  static #validate(`,
+      `    tree: ${ctx.firstNodeType},`,
+      `  ): { ok: true; tree: ${ctx.firstNodeType} } | { ok: false } {`,
+      `    // TODO: add semantic validation; return { ok: false } to reject`,
+      `    return { ok: true, tree }`,
+      `  }`,
+      ``,
+      `  // eslint-disable-next-line @typescript-eslint/no-unused-vars`,
+      `  static #transform(tree: ${ctx.firstNodeType}): string {`,
+      `    return fromJSONAST(transform(tree, ${ctx.camelBase}ToJSON))`,
+      `  }`,
+      `}`,
+      ``,
+    ],
+  }
+}
+
+/**
+ * Facade public API for the split facade+pipeline+json pattern.
+ * Re-exports `XxxError` from the pipeline artifact so consumers have a single import point.
+ */
+function splitFacadeJsonWithPipelineSection(ctx: ScaffoldCtx): Section {
+  return {
+    header: null,
+    imports: [
+      { from: ctx.pipelineModule, names: [ctx.pipelineClass] },
+      { from: ctx.transformerModule, names: [`jsonTo${ctx.base}`] },
+      { from: '@configuredthings/rdp.js', names: ['transform', 'toJSONAST'] },
+    ],
+    lines: [
+      `export { ${ctx.errorClass} } from '${ctx.pipelineModule}'`,
+      ``,
+      `/**`,
+      ` * Parse \`input\` as ${ctx.base} format and serialise the result to a JSON string.`,
+      ` *`,
+      ` * @param input - Source string in ${ctx.base} format.`,
+      ` * @returns A JSON string.`,
+      ` * @throws {\`${ctx.errorClass}\`} If \`input\` does not match the grammar or is invalid.`,
+      ` */`,
+      `export function ${ctx.camelBase}ToJSONString(input: string): string {`,
+      `  return ${ctx.pipelineClass}.run(input)`,
+      `}`,
+      ``,
+      `/**`,
+      ` * Parse \`input\` as a JSON string and emit it in ${ctx.base} format.`,
+      ` *`,
+      ` * @param input - A valid JSON string.`,
+      ` * @returns A string in ${ctx.base} format.`,
+      ` */`,
+      `export function jsonStringTo${ctx.base}(input: string): string {`,
+      `  return transform(toJSONAST(input), jsonTo${ctx.base})`,
+      `}`,
+      ``,
+    ],
+  }
+}
+
+/**
+ * Facade public API for the split facade+json pattern (no pipeline).
+ * Parses inline and wraps `RDParserException` in `XxxError`.
+ */
+function splitFacadeJsonNoPipelineSection(ctx: ScaffoldCtx): Section {
+  return {
+    header: null,
+    imports: [
+      { from: ctx.parserModule, names: [ctx.parserName, `type ${ctx.firstNodeType}`] },
+      { from: ctx.transformerModule, names: [`${ctx.camelBase}ToJSON`, `jsonTo${ctx.base}`] },
+      {
+        from: '@configuredthings/rdp.js',
+        names: ['RDParserException', 'transform', 'toJSONAST', 'fromJSONAST'],
+      },
+    ],
+    lines: [
+      `export class ${ctx.errorClass} extends Error {`,
+      `  constructor(input: string) {`,
+      `    super(\`invalid input: "\${input}"\`)`,
+      `    this.name = '${ctx.errorClass}'`,
+      `  }`,
+      `}`,
+      ``,
+      `/**`,
+      ` * Parse \`input\` as ${ctx.base} format and serialise the result to a JSON string.`,
+      ` *`,
+      ` * @param input - Source string in ${ctx.base} format.`,
+      ` * @returns A JSON string.`,
+      ` * @throws {\`${ctx.errorClass}\`} If \`input\` does not match the grammar.`,
+      ` */`,
+      `export function ${ctx.camelBase}ToJSONString(input: string): string {`,
+      `  let tree: ${ctx.firstNodeType}`,
+      `  try {`,
+      `    tree = ${ctx.parserName}.parse(input)`,
+      `  } catch (e) {`,
+      `    if (e instanceof RDParserException) throw new ${ctx.errorClass}(input)`,
+      `    throw e`,
+      `  }`,
+      `  return fromJSONAST(transform(tree, ${ctx.camelBase}ToJSON))`,
+      `}`,
+      ``,
+      `/**`,
+      ` * Parse \`input\` as a JSON string and emit it in ${ctx.base} format.`,
+      ` *`,
+      ` * @param input - A valid JSON string.`,
+      ` * @returns A string in ${ctx.base} format.`,
+      ` */`,
+      `export function jsonStringTo${ctx.base}(input: string): string {`,
+      `  return transform(toJSONAST(input), jsonTo${ctx.base})`,
+      `}`,
+      ``,
+    ],
+  }
+}
+
+// ── Multi-file public entry point ─────────────────────────────────────────────
+
+/** Derive the output filename for a single-artifact scaffold. */
+function scaffoldFilename(flags: ScaffoldFlags, ctx: ScaffoldCtx): string {
+  if (flags.facade) return `${ctx.camelBase}-facade.ts`
+  if (flags.pipeline) return `${ctx.camelBase}-pipeline.ts`
+  if (flags.transformer) return `${ctx.camelBase}-transformer.ts`
+  return `${ctx.camelBase}-scaffold.ts`
+}
+
+/**
+ * Generate all scaffold artifacts for a grammar, returning a map of
+ * `filename → TypeScript source`. Use this when writing to a directory
+ * (`--outdir`); each entry is written as a sibling file.
+ *
+ * Span-lexer parser (`{ParserName}.ts`), transformer, pipeline, and facade
+ * artifacts are all included when the corresponding flags are set.
+ *
+ * @param source  - EBNF or ABNF grammar source text.
+ * @param flags   - Which scaffold dimensions to include.
+ * @param options - Generator configuration (same as `generateParser`).
+ * @returns A `Record<filename, content>` with one entry per output file.
+ */
+export function generateScaffoldFiles(
+  source: string,
+  flags: ScaffoldFlags,
+  options: GeneratorOptions = {},
+): Record<string, string> {
+  const { traversal, transformer, facade, pipeline } = flags
+
+  if (traversal && transformer) {
+    throw new Error(
+      `--traversal and --transformer are mutually exclusive. ` +
+        `Use --traversal (interpreter or tree-walker) to walk the parse tree directly, ` +
+        `or --transformer to emit a Transformer object — not both in the same scaffold.`,
+    )
+  }
+  if (traversal === Traversal.Interpreter && pipeline) {
+    throw new Error(
+      '--traversal interpreter cannot be combined with --pipeline. ' +
+        'The interpreter evaluates directly during parsing — there is no intermediate tree for ' +
+        'the validate stage to inspect. Use --traversal tree-walker --pipeline instead.',
+    )
+  }
+
+  const format = options.format ?? 'ebnf'
+  const parserName = options.parserName ?? 'GeneratedParser'
+  const treeName = options.treeName ?? 'ParseTree'
+
+  const ast =
+    format === 'abnf'
+      ? ABNFParser.parse(source, {
+          ...(options.caseSensitiveStrings !== undefined && {
+            caseSensitiveStrings: options.caseSensitiveStrings,
+          }),
+        })
+      : EBNFParser.parse(source)
+  detectLeftRecursion(ast)
+
+  const result: Record<string, string> = {}
+
+  // Span-lexer parser always goes to its own file.
+  if (flags.lexer === Lexer.Span) {
+    result[`${parserName}.ts`] = generateSpanLexerScaffold(ast, parserName, false, treeName)
+  }
+
+  // No transformer/facade/pipeline → parser only (scannerless or span already added).
+  if (!transformer && !facade && !pipeline) {
+    if (flags.lexer !== Lexer.Span) {
+      result[`${parserName}.ts`] = generateParser(source, {
+        ...options,
+        ...(traversal !== undefined && { traversal }),
+      })
+    }
+    return result
+  }
+
+  const ctx = buildCtx(ast, parserName, treeName)
+
+  // ── JSON + facade + pipeline → 3 files ──────────────────────────────────────
+  if (transformer === Transformer.JSON && facade && pipeline) {
+    result[`${ctx.camelBase}-transformer.ts`] = compose(
+      {
+        variantLabel: 'JSON transformer',
+        stepsLines: [
+          `// Steps: 1) fill in ${ctx.camelBase}ToJSON handlers  2) fill in jsonTo${ctx.base} handlers`,
+          `//        3) remove eslint-disable-next-line comments`,
+        ],
+        sections: [jsonTransformerSection(ast, ctx)],
+      },
+      ctx,
+    )
+    result[`${ctx.camelBase}-pipeline.ts`] = compose(
+      {
+        variantLabel: 'Pipeline:json',
+        stepsLines: [
+          `// Steps: 1) add semantic validation in #validate  2) remove eslint-disable-next-line comments`,
+        ],
+        sections: [errorSection(ctx), splitJsonPipelineSection(ctx)],
+      },
+      ctx,
+    )
+    result[`${ctx.camelBase}-facade.ts`] = compose(
+      {
+        variantLabel: 'Facade:json',
+        stepsLines: [],
+        sections: [splitFacadeJsonWithPipelineSection(ctx)],
+      },
+      ctx,
+    )
+    return result
+  }
+
+  // ── JSON + facade (no pipeline) → 2 files ───────────────────────────────────
+  if (transformer === Transformer.JSON && facade) {
+    result[`${ctx.camelBase}-transformer.ts`] = compose(
+      {
+        variantLabel: 'JSON transformer',
+        stepsLines: [
+          `// Steps: 1) fill in ${ctx.camelBase}ToJSON handlers  2) fill in jsonTo${ctx.base} handlers`,
+          `//        3) remove eslint-disable-next-line comments`,
+        ],
+        sections: [jsonTransformerSection(ast, ctx)],
+      },
+      ctx,
+    )
+    result[`${ctx.camelBase}-facade.ts`] = compose(
+      {
+        variantLabel: 'Facade:json',
+        stepsLines: [
+          `// Steps: 1) fill in stubs in ${ctx.camelBase}-transformer.ts  2) remove eslint-disable-next-line comments`,
+        ],
+        sections: [splitFacadeJsonNoPipelineSection(ctx)],
+      },
+      ctx,
+    )
+    return result
+  }
+
+  // ── All other scaffold combinations → single file ────────────────────────────
+  const plan = planScaffold(flags, ast, ctx)
+  result[scaffoldFilename(flags, ctx)] = compose(plan, ctx)
+  return result
 }
 
 // ── Init scaffold ─────────────────────────────────────────────────────────────
@@ -1093,6 +1377,7 @@ function generateSpanLexerScaffold(
   ast: GrammarAST,
   parserName: string,
   evaluating: boolean,
+  treeName: string = 'ParseTree',
 ): string {
   const firstRule = ast.rules[0]
   if (!firstRule) return ''
@@ -1156,55 +1441,19 @@ function generateSpanLexerScaffold(
     `// ${scaffoldVariant} scaffold generated by rdp-gen — this file is not regenerated; edit freely.`,
   )
   lines.push(`import { TokenRDParser, type TokenStream } from '@configuredthings/rdp.js'`)
-  lines.push(`//`)
-  lines.push(`// A two-stage tokeniser pipeline for ${parserName}:`)
-  lines.push(
-    `//   Stage 1 — spanTokenize(input)  : identifies token boundaries without string allocation`,
-  )
-  lines.push(
-    `//   Stage 2 — classify(input, spans): maps raw spans to typed tokens for this grammar`,
-  )
-  if (evaluating) {
-    lines.push(
-      `//   Stage 3 — TokenParser.parse()   : recursive descent that evaluates directly during descent`,
-    )
-    lines.push(`//                                     (no intermediate tree is materialised)`)
-  } else {
-    lines.push(`//   Stage 3 — TokenParser.parse()   : recursive descent on the typed token stream`)
-  }
-  lines.push(`//`)
-  lines.push(
-    `// Why? A scannerless parser tries every terminal alternative at each character position.`,
-  )
-  lines.push(
-    `// For grammars with large character-class rules this creates significant repeated work.`,
-  )
-  lines.push(
-    `// A span tokeniser collapses those checks into one forward scan; the classifier then`,
-  )
-  lines.push(
-    `// applies grammar-specific typing as a second pass. Result: 3–5× faster on real grammars,`,
-  )
-  lines.push(`// and the whole pipeline is fully mechanisable from the grammar.`)
-  lines.push(`//`)
+  lines.push(``)
+  lines.push(`// ── Parse tree types ───────────────────────────────────────────────────────────`)
+  lines.push(``)
+  lines.push(...emitTypeDeclarations(ast, treeName))
   lines.push(`// Steps to complete:`)
   lines.push(
     `//   1) Review TT — add keyword constants if your grammar distinguishes reserved words`,
   )
   lines.push(`//   2) Adjust SPAN_OPTS if your grammar uses different comment or string delimiters`)
-  if (evaluating) {
-    lines.push(
-      `//   3) Fill in each #parse<Rule> method to evaluate directly and return your concrete type`,
-    )
-    lines.push(
-      `//   4) Change the return type of parse() from 'unknown' to your concrete result type`,
-    )
-  } else {
-    lines.push(`//   3) Fill in each #parse<Rule> method in TokenParser (all throw by default)`)
-    lines.push(
-      `//   4) Change the return type of parse() from 'unknown' to your concrete result type`,
-    )
-  }
+  lines.push(`//   3) Fill in each #parse<Rule> method in TokenParser (all throw by default)`)
+  lines.push(
+    `//   4) Change the return type of parse() from 'unknown' to your concrete result type`,
+  )
   lines.push(``)
 
   // ── TT enum ────────────────────────────────────────────────────────────
@@ -1422,8 +1671,7 @@ function generateSpanLexerScaffold(
     lines.push(` * Change the return type of \`parse()\` from \`unknown\` to your concrete result.`)
   }
   lines.push(` */`)
-  const tokenParserName = `${stripParserSuffix(parserName)}TokenParser`
-  lines.push(`export class ${tokenParserName} extends TokenRDParser {`)
+  lines.push(`export class ${parserName} extends TokenRDParser {`)
   lines.push(`  private constructor(stream: TokenStream) {`)
   lines.push(`    super(stream)`)
   lines.push(`  }`)
@@ -1431,7 +1679,7 @@ function generateSpanLexerScaffold(
   lines.push(`  static parse(input: string): unknown {`)
   lines.push(`    const spans  = spanTokenize(input)`)
   lines.push(`    const stream = classify(input, spans)`)
-  lines.push(`    return new ${tokenParserName}(stream).#parse${pascalCase(firstRule.name)}()`)
+  lines.push(`    return new ${parserName}(stream).#parse${pascalCase(firstRule.name)}()`)
   lines.push(`  }`)
   lines.push(``)
   lines.push(`  // ── Production rules ───────────────────────────────────────────────────────`)
@@ -1472,6 +1720,7 @@ function stripParserSuffix(parserName: string): string {
 function pascalCase(name: string): string {
   return name.replace(/(^|[-_])([a-zA-Z])/g, (_, __, c: string) => c.toUpperCase())
 }
+
 /**
  * Generate `node.field: Type` hint strings for a production rule's fields,
  * mirroring the shape of the emitted `XxxNode` type. Used as inline comments

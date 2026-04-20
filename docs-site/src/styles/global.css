@@ -387,6 +387,40 @@ a:hover { color: var(--color-link-hover); text-decoration: underline; }
 }
 
 /* ── Shiki code blocks ────────────────────────────────────────────────────── */
+.doc-content .code-block-wrapper {
+  position: relative;
+}
+
+.doc-content .code-block-wrapper:not(:hover) .code-copy-btn:not(.code-copy-btn--copied) {
+  opacity: 0;
+}
+
+.code-copy-btn {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.75rem;
+  font-family: var(--font-sans);
+  line-height: 1.5;
+  border-radius: 6px;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: opacity 0.15s, background 0.15s, color 0.15s;
+}
+
+.code-copy-btn:hover {
+  background: var(--color-border);
+  color: var(--color-text);
+}
+
+.code-copy-btn--copied {
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
 .doc-content pre {
   margin: 1.25rem 0;
   border-radius: 10px;
