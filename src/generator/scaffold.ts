@@ -85,9 +85,9 @@ type ScaffoldCtx = {
   pipelineClass: string
   loadFn: string
   entryFn: string
-  /** Import path for the transformer artifact (e.g. `./sisl-transformer.js`). */
+  /** Import path for the transformer artifact (e.g. `./date-transformer.js`). */
   transformerModule: string
-  /** Import path for the pipeline artifact (e.g. `./sisl-pipeline.js`). */
+  /** Import path for the pipeline artifact (e.g. `./date-pipeline.js`). */
   pipelineModule: string
 }
 

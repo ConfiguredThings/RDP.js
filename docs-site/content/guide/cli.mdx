@@ -137,8 +137,8 @@ When `--transformer json` is combined with `--facade` (with or without `--pipeli
 `--outdir` produces **separate files** for each concern so the facade is a genuine module boundary:
 
 ```bash
-# Writes: src/SISLParser.ts, src/sisl-transformer.ts, src/sisl-pipeline.ts, src/sisl-facade.ts
-rdp-gen sisl.abnf --parser-name SISLParser --transformer json --facade --pipeline --lexer span --outdir src/
+# Writes: src/DateParser.ts, src/date-transformer.ts, src/date-pipeline.ts, src/date-facade.ts
+rdp-gen date.abnf --parser-name DateParser --transformer json --facade --pipeline --lexer span --outdir src/
 ```
 
 The typical workflow for a new grammar:

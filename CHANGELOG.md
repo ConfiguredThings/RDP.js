@@ -17,7 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- `--output <file>` renamed to `--outdir <dir>` — the flag now accepts a directory; artifact filenames are derived from the parser base name (e.g. `sisl-facade.ts`, `sisl-transformer.ts`) ([#25](https://github.com/ConfiguredThings/RDP.js/issues/25))
+- `--output <file>` renamed to `--outdir <dir>` — the flag now accepts a directory; artifact filenames are derived from the parser base name (e.g. `date-facade.ts`, `date-transformer.ts`) ([#25](https://github.com/ConfiguredThings/RDP.js/issues/25))
 - `--traversal` alone now adds mixin stubs directly to the generated parser file (can be re-generated freely) rather than producing a separate scaffold file. Using `--traversal` together with `--facade`, `--pipeline`, or `--transformer` still produces a scaffold file
 
 ## [0.6.0] - 2026-04-20
