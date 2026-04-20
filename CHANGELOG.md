@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-04-20
+
 ### Added
 
 - `generateScaffoldFiles(source, flags, options): Record<string, string>` — new programmatic API that returns a map of filename → content; used by the CLI when `--outdir` is given ([#25](https://github.com/ConfiguredThings/RDP.js/issues/25))
