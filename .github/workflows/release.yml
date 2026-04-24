@@ -57,7 +57,7 @@ jobs:
           fi
           echo "✓ Comparison link found for $VERSION"
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 21
