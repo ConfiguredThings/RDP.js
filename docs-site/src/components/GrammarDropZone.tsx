@@ -2,9 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { EBNFParser, ABNFParser, generateParser } from '@configuredthings/rdp.js/generator'
 
 type Status =
-  | { kind: 'idle' }
-  | { kind: 'ok'; outputName: string }
-  | { kind: 'error'; message: string }
+  { kind: 'idle' } | { kind: 'ok'; outputName: string } | { kind: 'error'; message: string }
 
 function toParserName(filename: string): string {
   const base = filename.replace(/\.(ebnf|abnf)$/i, '')
