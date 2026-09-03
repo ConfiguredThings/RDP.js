@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- CI: `pr-checks.yml` and `release.yml` now also run [`ConfiguredThings/validate-changelog-action`](https://github.com/ConfiguredThings/validate-changelog-action), a shared Keep a Changelog linter (valid/non-duplicated `###` subsection names, a reference link for every `##` section, and a correctly-targeted `[Unreleased]` link) alongside the existing hand-rolled checks here, which only cover PR/tag-specific content.
+
+### Fixed
+
+- `CHANGELOG.md` had a duplicate `### Changed` subsection under `## [0.3.0]` (two separate blocks instead of one) and a `[unreleased]:` reference link not matching the `## [Unreleased]` heading's case — both found by running the shared linter above against this file for the first time.
+
 ## [0.7.0] - 2026-04-20
 
 ### Added
@@ -86,14 +94,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `cli.mdx` EBNF grammar examples and `RailroadDiagram` component now import `arithEBNF` from `@configuredthings/rdp.js/grammars` rather than inlining the grammar text
 - Internal cross-links added throughout the guide (LL(1) → Concepts, `--observable` → Debugging, TypeDoc API links for key types and functions)
 - CI: `pr-checks.yml` and `docs.yml` now verify that committed files in `src/examples/` match `npm run generate:examples` output, failing with a diff if they drift
-
-### Removed
-- `commander` dependency removed from the CLI — replaced with Node's built-in `util.parseArgs`. Turns out "zero dependencies" is easier to maintain when there actually are zero dependencies.
-
-### Changed
 - `rdp-gen init` simplified `package.json` scripts: the scaffolded project now has a single `build: tsc` script rather than a grammar-generation step, reflecting that `init` targets hand-written parsers
 - Generated parse-tree node types now use **named fields** for non-terminal references instead of positional `item0`, `item1`, … names. A field referencing rule `Year` is now typed as `year: YearNode`; terminals (string literals, char values) keep `item`_n_ names. When the same non-terminal appears more than once in a rule body all occurrences are suffixed (`year0`, `year1`, …). This is a **breaking change** for any code that accesses generated node fields by positional name ([#15](https://github.com/ConfiguredThings/RDP.js/issues/15))
 - Generated parser methods now use **per-method, per-hint variable counters** instead of a single global counter. Internal variable and label names (`_pos0`, `found_alt0`, …) reset to index 0 at the start of each method, producing cleaner and more readable generated output ([#15](https://github.com/ConfiguredThings/RDP.js/issues/15))
+
+### Removed
+- `commander` dependency removed from the CLI — replaced with Node's built-in `util.parseArgs`. Turns out "zero dependencies" is easier to maintain when there actually are zero dependencies.
 
 ## [0.2.0] - 2026-04-16
 
@@ -121,7 +127,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bootstrapping meta-grammars: EBNF and ABNF formats each described in both EBNF and ABNF (`src/grammars/`)
 - Left-recursion detection at grammar compilation time
 
-[unreleased]: https://github.com/ConfiguredThings/RDP.js/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/ConfiguredThings/RDP.js/compare/v0.7.0...HEAD
 [0.7.0]: https://github.com/ConfiguredThings/RDP.js/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/ConfiguredThings/RDP.js/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/ConfiguredThings/RDP.js/compare/v0.4.0...v0.5.0

@@ -31,6 +31,10 @@ jobs:
             exit 1
           fi
           echo "✓ Unreleased changelog has content"
+
+      - name: Validate CHANGELOG.md is Keep a Changelog compliant
+        uses: ConfiguredThings/validate-changelog-action@v2
+
       - run: npm run build
       - run: npm run lint
       - run: npm test
