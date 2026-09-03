@@ -1,0 +1,108 @@
+name: Dependabot Changelog
+
+# Dependabot's own PRs never touch CHANGELOG.md, so pr-checks.yml's
+# "Check Unreleased changelog has content" step skips them. This workflow
+# closes that gap by committing a changelog entry onto the PR branch itself
+# right after Dependabot opens it, so the PR carries real changelog content
+# like any other PR would.
+#
+# This uses pull_request_target rather than pull_request: GitHub gives
+# workflows triggered by the dependabot[bot] actor a read-only GITHUB_TOKEN
+# on the pull_request event (to stop a malicious dependency update from
+# using write access), which would make `git push` below fail. Running on
+# pull_request_target instead executes the workflow file from the base
+# branch with normal repo permissions, regardless of who opened the PR.
+# We only read PR metadata and edit CHANGELOG.md text here — nothing from
+# the PR branch is built or executed — so that's safe to do.
+
+on:
+  pull_request_target:
+    types: [opened]
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  add-entry:
+    if: github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+
+      - name: Get dependency metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@v2
+        with:
+          github-token: "${{ secrets.GITHUB_TOKEN }}"
+
+      - name: Add changelog entry
+        env:
+          DEP_NAMES: ${{ steps.metadata.outputs.dependency-names }}
+          PREV_VERSION: ${{ steps.metadata.outputs.previous-version }}
+          NEW_VERSION: ${{ steps.metadata.outputs.new-version }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          set -euo pipefail
+
+          if [ -n "$PREV_VERSION" ] && [ -n "$NEW_VERSION" ]; then
+            ENTRY="- Bump \`${DEP_NAMES}\` from ${PREV_VERSION} to ${NEW_VERSION}"
+          else
+            # Grouped updates touch multiple deps at once; fetch-metadata only
+            # reports a single before/after version pair for single-dependency
+            # PRs, so fall back to Dependabot's own PR title for the rest.
+            ENTRY="- ${PR_TITLE}"
+          fi
+
+          if grep -qF "$ENTRY" CHANGELOG.md; then
+            echo "Entry already present, nothing to do."
+            exit 0
+          fi
+
+          awk -v entry="$ENTRY" '
+            BEGIN { in_unreleased = 0; inserted = 0 }
+            /^## \[Unreleased\]/ {
+              print
+              in_unreleased = 1
+              next
+            }
+            in_unreleased && /^## / {
+              if (!inserted) {
+                print "### Changed"
+                print ""
+                print entry
+                print ""
+                inserted = 1
+              }
+              in_unreleased = 0
+              print
+              next
+            }
+            in_unreleased && /^### Changed/ && !inserted {
+              print
+              print ""
+              print entry
+              inserted = 1
+              getline
+              if ($0 != "") print
+              next
+            }
+            { print }
+            END {
+              if (in_unreleased && !inserted) {
+                print "### Changed"
+                print ""
+                print entry
+              }
+            }
+          ' CHANGELOG.md > CHANGELOG.md.tmp
+          mv CHANGELOG.md.tmp CHANGELOG.md
+
+          git config user.name "dependabot[bot]"
+          git config user.email "49699333+dependabot[bot]@users.noreply.github.com"
+          git add CHANGELOG.md
+          git commit -m "Add changelog entry for dependency bump" -m "$ENTRY"
+          git push
