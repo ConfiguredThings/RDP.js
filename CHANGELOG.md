@@ -10,15 +10,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - CI: `pr-checks.yml` and `release.yml` now also run [`ConfiguredThings/validate-changelog-action`](https://github.com/ConfiguredThings/validate-changelog-action), a shared Keep a Changelog linter (valid/non-duplicated `###` subsection names, a reference link for every `##` section, and a correctly-targeted `[Unreleased]` link) alongside the existing hand-rolled checks here, which only cover PR/tag-specific content.
+- New `dependabot-changelog.yml` workflow: Dependabot's own PRs never touch `CHANGELOG.md`, so `pr-checks.yml`'s "Check Unreleased changelog has content" step used to skip them entirely (`if: github.actor != 'dependabot[bot]'`) rather than enforce it. This workflow closes that gap instead of working around it — on `pull_request_target` (needed since Dependabot-triggered `pull_request` events get a read-only `GITHUB_TOKEN`, which can't push), it reads the dependency bump via `dependabot/fetch-metadata`, appends a `- Bump ... from X to Y` line under `[Unreleased]`'s `### Changed`, and pushes the commit straight onto the Dependabot PR branch. The dependabot skip on the existing check is removed accordingly, so Dependabot PRs now have to carry real changelog content like any other PR.
 
 ### Fixed
 
 - `CHANGELOG.md` had a duplicate `### Changed` subsection under `## [0.3.0]` (two separate blocks instead of one) and a `[unreleased]:` reference link not matching the `## [Unreleased]` heading's case — both found by running the shared linter above against this file for the first time.
-
-### Fixed
-
 - `npm ci` failed with an ERESOLVE conflict: the root `typescript` dev dependency was bumped to `^7.0.2`, but `ts-jest@29.4.11`'s peer range (`>=4.3 <7`) doesn't support TypeScript 7 yet (checked all published `ts-jest` versions up to `29.4.12`, including the `next` tag — none support TS7), and this broke `npm ci` in CI for every PR before any test could run. Pinned `typescript` back to `^6.0.3`, the latest 6.x release, until `ts-jest` adds TS7 support.
 - `npm run lint` crashed outright under `typescript@7` (a `TypeError` inside `typescript-eslint`'s `typescript-estree`), which had been masking two real `prettier/prettier` formatting errors in `docs-site/src/components/GrammarDropZone.tsx` and `src/cli/rdp-gen.ts`. Now that the `typescript` downgrade lets lint actually run, ran `eslint --fix` to clear both.
+- `CHANGELOG.md` ended up with two separate `### Fixed` subsections under `## [Unreleased]` after two PRs landed back to back, each adding its own — exactly the duplicate-subsection mistake the new linter (above) is meant to catch. Merged them into one.
 
 ## [0.7.0] - 2026-04-20
 
