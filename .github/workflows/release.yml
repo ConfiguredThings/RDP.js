@@ -57,6 +57,9 @@ jobs:
           fi
           echo "✓ Comparison link found for $VERSION"
 
+      - name: Validate CHANGELOG.md is Keep a Changelog compliant
+        uses: ConfiguredThings/validate-changelog-action@v2
+
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
