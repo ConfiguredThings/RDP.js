@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- `npm ci` failed with an ERESOLVE conflict: the root `typescript` dev dependency was bumped to `^7.0.2`, but `ts-jest@29.4.11`'s peer range (`>=4.3 <7`) doesn't support TypeScript 7 yet (checked all published `ts-jest` versions up to `29.4.12`, including the `next` tag — none support TS7), and this broke `npm ci` in CI for every PR before any test could run. Pinned `typescript` back to `^6.0.3`, the latest 6.x release, until `ts-jest` adds TS7 support.
+
 ## [0.7.0] - 2026-04-20
 
 ### Added
