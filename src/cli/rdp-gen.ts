@@ -113,8 +113,7 @@ function runGenerate(rawArgs: string[]): void {
   }
 
   const format = (values['format'] ?? (grammarPath.endsWith('.abnf') ? 'abnf' : 'ebnf')) as
-    | 'ebnf'
-    | 'abnf'
+    'ebnf' | 'abnf'
   const source = readFileSync(grammarPath, 'utf-8')
 
   const generatorOptions = {
