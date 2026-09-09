@@ -19,6 +19,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `npm run lint` crashed outright under `typescript@7` (a `TypeError` inside `typescript-eslint`'s `typescript-estree`), which had been masking two real `prettier/prettier` formatting errors in `docs-site/src/components/GrammarDropZone.tsx` and `src/cli/rdp-gen.ts`. Now that the `typescript` downgrade lets lint actually run, ran `eslint --fix` to clear both.
 - `CHANGELOG.md` ended up with two separate `### Fixed` subsections under `## [Unreleased]` after two PRs landed back to back, each adding its own — exactly the duplicate-subsection mistake the new linter (above) is meant to catch. Merged them into one.
 
+### Changed
+
+- Bump `typescript` from 6.0.3 to 7.0.2
+
 ## [0.7.0] - 2026-04-20
 
 ### Added
