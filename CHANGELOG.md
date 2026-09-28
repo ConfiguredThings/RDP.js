@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Bump `typescript` from 6.0.3 to 7.0.2
 - Bump `eslint` from 10.9.1 to 10.10.0
 - Bump `ConfiguredThings/validate-changelog-action` from 2 to 4
 - Bump `dependabot/fetch-metadata` from 2 to 3
