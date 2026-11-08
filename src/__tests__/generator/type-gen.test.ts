@@ -1,4 +1,6 @@
+import ts from 'typescript'
 import { generateTypes, generateWalker, typeForBody } from '../../generator/type-gen.js'
+import { EBNFParser } from '../../generator/ebnf-parser.js'
 import type { GrammarAST, RuleBody } from '../../generator/ast.js'
 
 const simpleAst: GrammarAST = {
@@ -287,5 +289,90 @@ describe('generateWalker', () => {
     const output = generateWalker(ast)
     // Should discriminate using 'kind' in check
     expect(output).toContain("'kind' in")
+  })
+})
+
+// ── childNodes over alternations of anonymous sequences / repetitions ─────────
+
+/** Type-check generated code (types + walker) in memory; returns the error messages. */
+function typeErrors(source: string): string[] {
+  const fileName = '/virtual/generated.ts'
+  const options: ts.CompilerOptions = {
+    strict: true,
+    noUncheckedIndexedAccess: true,
+    noEmit: true,
+    target: ts.ScriptTarget.ES2022,
+    types: [],
+  }
+  const host = ts.createCompilerHost(options)
+  const getSourceFile = host.getSourceFile.bind(host)
+  host.getSourceFile = (name, languageVersion, ...rest): ts.SourceFile | undefined =>
+    name === fileName
+      ? ts.createSourceFile(name, source, languageVersion)
+      : getSourceFile(name, languageVersion, ...rest)
+  const program = ts.createProgram([fileName], options, host)
+  return ts
+    .getPreEmitDiagnostics(program)
+    .map((d) => ts.flattenDiagnosticMessageText(d.messageText, '\n'))
+}
+
+function walkerFor(grammar: string): { code: string; walker: string } {
+  const ast = EBNFParser.parse(grammar)
+  const walker = generateWalker(ast)
+  return { walker, code: `${generateTypes(ast)}\n${walker}` }
+}
+
+describe('generateWalker — alternations of sequences and repetitions', () => {
+  it('handles a sequence alternative alongside a repetition of sequences', () => {
+    // item2 is typed `{ item0: string; num: NumNode } | { item0: string; num: NumNode }[]`
+    const { code, walker } = walkerFor("Val = 'x', Num, ('-', Num | {'.', Num});\nNum = '1';")
+    expect(walker).toContain('Array.isArray(')
+    expect(walker).toContain('for (const _item')
+    expect(typeErrors(code)).toEqual([])
+  })
+
+  it('handles a bare non-terminal alternative alongside a repetition of non-terminals', () => {
+    const { code, walker } = walkerFor("Val = Num | {Num};\nNum = '1';")
+    expect(walker).toContain('Array.isArray(')
+    expect(typeErrors(code)).toEqual([])
+  })
+
+  it('emits the extraction once for sequence branches that share field names', () => {
+    // Three branches with identical shape: they are indistinguishable at runtime.
+    const { code, walker } = walkerFor(
+      "Prim = '{', Body, '}' | '[', Body, ']' | '(', Body, ')';\nBody = 'b';",
+    )
+    expect(walker.match(/children\.push\(_f\d+\.body\)/g)).toHaveLength(1)
+    expect(typeErrors(code)).toEqual([])
+  })
+
+  it('emits the extraction once when branches differ only in element type', () => {
+    const { code, walker } = walkerFor(
+      "Lit = \"'\", {Sq}, \"'\" | '\"', {Dq}, '\"';\nSq = 'a';\nDq = 'b';",
+    )
+    expect(walker.match(/children\.push\(\.\.\._f\d+\.item1\)/g)).toHaveLength(1)
+    expect(typeErrors(code)).toEqual([])
+  })
+
+  it('discriminates branches on a field unique to each, not a shared positional name', () => {
+    // Both branches have an `item1` (Wsp[] in one, a string in the other), so `'item1' in v`
+    // would match both and fail to narrow; the walker must pick `body` / `integer` instead.
+    const { code, walker } = walkerFor(
+      [
+        "Prim = '(', Wsp, Body, Wsp, ')' | Int, Wsp, '*', Wsp, Prim | Name;",
+        "Body = 'b';",
+        "Int = '1';",
+        "Name = 'n';",
+        "Wsp = {' '};",
+      ].join('\n'),
+    )
+    expect(walker).not.toContain("'item1' in")
+    expect(typeErrors(code)).toEqual([])
+  })
+
+  it('does not extract fields from a sequence branch that has no non-terminals', () => {
+    const { code, walker } = walkerFor("Val = '(', ')' | '[', Body, ']';\nBody = 'b';")
+    expect(walker).toContain("'body' in")
+    expect(typeErrors(code)).toEqual([])
   })
 })

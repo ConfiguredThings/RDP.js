@@ -37,3 +37,18 @@ jobs:
       - run: npm run build
       - run: npm run lint
       - run: npm test
+
+      # Exercise the code generator end to end (rdp-gen is built above). Runs last
+      # because generate:meta writes into src/, which lint would otherwise pick up.
+      - name: Check committed examples match generator output
+        run: |
+          npm run generate:examples
+          git diff --exit-code -- examples || {
+            echo "::error::examples/ is out of date. Run 'npm run generate:examples' and commit the result."
+            exit 1
+          }
+
+      - name: Generate and type-check the meta-grammar parsers
+        run: |
+          npm run generate:meta
+          npx tsc -p tsconfig.esm.json --noEmit

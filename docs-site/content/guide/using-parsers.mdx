@@ -113,7 +113,7 @@ functions are recursive in exactly the same way.
 **Generate the parser:**
 
 ```bash
-rdp-gen expr.ebnf --parser-name ExprParser --output src/ExprParser.ts
+rdp-gen expr.ebnf --parser-name ExprParser > src/ExprParser.ts
 ```
 
 **Evaluator** (`src/expr.ts`):
@@ -207,7 +207,7 @@ There are three runtime pieces — `Visitor<T>` + `visit()` for partial dispatch
 function, `childNodes()`, always emitted alongside the generated parser.
 
 ```bash
-rdp-gen expr.ebnf --parser-name ExprParser --output src/ExprParser.ts
+rdp-gen expr.ebnf --parser-name ExprParser > src/ExprParser.ts
 ```
 
 #### `Visitor<ParseTree, T>` and `visit()`
@@ -363,8 +363,8 @@ shared domain IR, and wire them together. The IR is the hub — every parser low
 it, every emitter reads from it:
 
 ```bash
-rdp-gen format-a.ebnf --parser-name FormatAParser --transformer --output src/format-a-transformer.ts
-rdp-gen format-b.ebnf --parser-name FormatBParser --transformer --output src/format-b-transformer.ts
+rdp-gen format-a.ebnf --parser-name FormatAParser --transformer > src/format-a-transformer.ts
+rdp-gen format-b.ebnf --parser-name FormatBParser --transformer > src/format-b-transformer.ts
 ```
 
 Each scaffold gives you a `Transformer<FormatXTree, unknown>`. Replace `unknown` with
@@ -654,7 +654,7 @@ Digit = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9';
 **Generate the parser:**
 
 ```bash
-rdp-gen date.ebnf --parser-name DateParser --output src/DateParser.ts
+rdp-gen date.ebnf --parser-name DateParser > src/DateParser.ts
 ```
 
 **Facade module** (`src/date.ts`):

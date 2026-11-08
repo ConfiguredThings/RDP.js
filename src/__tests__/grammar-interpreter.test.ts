@@ -635,3 +635,34 @@ describe('observer integration', () => {
     expect(enters.some((e) => e.kind === 'enter' && e.production === 'Inner')).toBe(true)
   })
 })
+
+describe('GrammarInterpreter — case-insensitive terminals', () => {
+  const ci = (value: string): RuleBody => ({ kind: 'terminal', value, caseInsensitive: true })
+
+  it('matches letters in either case', () => {
+    const g = grammar(['r', ci('GeT')])
+    for (const input of ['GeT', 'get', 'GET', 'gEt']) expect(parse(g, input)).toBe(true)
+  })
+
+  it('still requires every character to match', () => {
+    const g = grammar(['r', ci('GET')])
+    expect(parse(g, 'gex')).toBe(false)
+    expect(parse(g, 'ge')).toBe(false)
+  })
+
+  it('restores the position when a later character fails', () => {
+    const g = grammar(['r', alt(seq(ci('ab'), terminal('1')), seq(terminal('A'), terminal('c')))])
+    expect(parse(g, 'Ac')).toBe(true)
+  })
+
+  it('matches non-letters exactly', () => {
+    const g = grammar(['r', ci('a-1')])
+    expect(parse(g, 'A-1')).toBe(true)
+    expect(parse(g, 'A_1')).toBe(false)
+  })
+
+  it('leaves plain terminals case-sensitive', () => {
+    const g = grammar(['r', terminal('GET')])
+    expect(parse(g, 'get')).toBe(false)
+  })
+})

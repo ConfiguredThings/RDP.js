@@ -113,7 +113,7 @@ produces:
 ```
 
 The full discriminated union of `kind` values is defined in
-[`src/generator/ast.ts`](/api/modules/Grammar_AST.html):
+[`src/generator/ast.ts`](/api/types/Generator.RuleBody.html):
 `sequence`, `alternation`, `optional`, `zeroOrMore`, `oneOrMore`, `nonTerminal`,
 `terminal`, `exception` (EBNF), and `charValue`, `coreRule`, `repetition` (ABNF).
 `GrammarInterpreter` and `codegen.ts` both operate on this same structure — they

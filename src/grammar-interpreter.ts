@@ -234,7 +234,9 @@ export class GrammarInterpreter extends ObservableRDParser {
       // ── Terminals ─────────────────────────────────────────────────────────
 
       case 'terminal':
-        return this.#matchBytes(new TextEncoder().encode(body.value))
+        return body.caseInsensitive === true
+          ? this.#matchBytesIgnoreCase(new TextEncoder().encode(body.value))
+          : this.#matchBytes(new TextEncoder().encode(body.value))
 
       case 'nonTerminal':
         return this.#matchRule(body.name)
@@ -284,6 +286,24 @@ export class GrammarInterpreter extends ObservableRDParser {
    * @param bytes - The byte sequence to match.
    * @returns `true` if all bytes matched, `false` otherwise.
    */
+  /** Like {@link #matchBytes}, but ASCII letters match in either case. */
+  #matchBytesIgnoreCase(bytes: Uint8Array): boolean {
+    const savedPosition = this.getPosition()
+    for (const byte of bytes) {
+      const isUpper = byte >= 0x41 && byte <= 0x5a
+      const isLower = byte >= 0x61 && byte <= 0x7a
+      const matched =
+        isUpper || isLower
+          ? this.matchChar(byte | 0x20) || this.matchChar(byte & ~0x20)
+          : this.matchChar(byte)
+      if (!matched) {
+        this.restorePosition(savedPosition)
+        return false
+      }
+    }
+    return true
+  }
+
   #matchBytes(bytes: Uint8Array): boolean {
     if (bytes.length === 0) return true
     const savedPosition = this.getPosition()

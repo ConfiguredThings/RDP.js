@@ -1,9 +1,12 @@
-; ABNF meta-grammar written in ABNF — self-describing
+; ABNF meta-grammar written in ABNF - self-describing
 ; Describes the subset of ABNF syntax used by rdp-gen.
 ;
 ; Covers: rule definitions (=), alternation (/), double-quoted string literals,
-; zero-or-more (*X), one-or-more (1*X), optional groups ([...]), and the
-; DQUOTE core rule.  Does not cover char-range rules (%xNN-NN) or prose-val.
+; zero-or-more (*X), one-or-more (1*X), optional groups ([...]), the DQUOTE core
+; rule, and character-value rules (%xNN, %xNN-MM, %xNN.MM, %dNN, %bNN and their
+; range/concatenation forms), ";" comments, and rules continued over several lines.
+; A rule starts in column 0 (RFC 5234); a line that begins with whitespace continues
+; the previous rule.  Does not cover prose-val, "=/" or general n*m repetition.
 ;
 ; Because this grammar is itself written in ABNF and describes ABNF, it
 ; demonstrates the "self-describing" property of the grammar format.
@@ -13,16 +16,27 @@
 ;   Greeting = "hello" / "world"
 
 Grammar  = *ws Rule *(*ws Rule) *ws
-Rule     = RuleName hsp "=" hsp Body
-Body     = Sequence *(hsp "/" hsp Sequence)
-Sequence = Term *(hsp Term)
+Rule     = RuleName sep "=" sep Body
+Body     = Sequence *(sep "/" sep Sequence)
+Sequence = Term *(sep Term)
 Term     = Rep Element / Element
 Rep      = ("1" "*") / "*"
-Element  = Group / OptGrp / Str / RuleName
-Group    = "(" *ws Body *ws ")"
-OptGrp   = "[" *ws Body *ws "]"
+Element  = Group / OptGrp / CharVal / Str / RuleName
+Group    = "(" sep Body sep ")"
+OptGrp   = "[" sep Body sep "]"
+CharVal  = "%" ( HexVal / DecVal / BinVal )
+HexVal   = "x" HexCpnt ( "-" HexCpnt / *( "." HexCpnt ) )
+DecVal   = "d" DecCpnt ( "-" DecCpnt / *( "." DecCpnt ) )
+BinVal   = "b" BinCpnt ( "-" BinCpnt / *( "." BinCpnt ) )
+HexCpnt  = HEXDIG *HEXDIG
+DecCpnt  = DIGIT *DIGIT
+BinCpnt  = BIT *BIT
 Str      = DQUOTE *DChar DQUOTE
 DChar    = %x20-21 / %x23-7E
 RuleName = ALPHA *( ALPHA / DIGIT / "-" / "_" )
-ws       = %x20 / %x09 / %x0A / %x0D
-hsp      = *( %x20 / %x09 )
+ws       = %x20 / %x09 / %x0A / %x0D / comment
+comment  = ";" *( %x09 / %x20-7E )
+hch      = %x20 / %x09
+newline  = [%x0D] %x0A
+cnl      = [comment] newline
+sep      = *hch *( cnl 1*hch )

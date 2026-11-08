@@ -28,7 +28,7 @@ Every production rule entry and exit fires a pair of events on the observer. The
 Pass [`--observable`](/docs/cli/#rdp-gen-grammar--generate-a-parser) to `rdp-gen`:
 
 ```bash
-rdp-gen grammar.ebnf --parser-name MyParser --observable --output MyParser.ts
+rdp-gen grammar.ebnf --parser-name MyParser --observable > MyParser.ts
 ```
 
 This changes the generated class to extend `ObservableRDParser` instead of `ScannerlessRDParser`, and

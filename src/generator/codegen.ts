@@ -57,8 +57,8 @@ export type GeneratorOptions = {
   /**
    * When `true`, plain quoted string literals (`"abc"`) in ABNF grammars are matched
    * case-sensitively — the generated parser uses the exact characters as written.
-   * When `false` (the RFC 5234 default), unquoted literals are lowercased so the
-   * generated parser matches both cases.
+   * When `false` (the RFC 5234 default), they are case-insensitive: ASCII letters match
+   * in either case and the parse tree holds the text actually read.
    *
    * Has no effect on EBNF grammars or on `%s"..."` / `%i"..."` literals.
    * @default false
@@ -95,11 +95,6 @@ export type GeneratorOptions = {
  */
 export function generateParser(source: string, options: GeneratorOptions = {}): string {
   const format = options.format ?? 'ebnf'
-  const parserName = options.parserName ?? 'GeneratedParser'
-  const treeName = options.treeName ?? 'ParseTree'
-  const observable = options.observable ?? false
-  const traversal = options.traversal
-
   const ast =
     format === 'abnf'
       ? ABNFParser.parse(source, {
@@ -108,6 +103,27 @@ export function generateParser(source: string, options: GeneratorOptions = {}): 
           }),
         })
       : EBNFParser.parse(source)
+  return generateParserFromAST(ast, options)
+}
+
+/**
+ * Emit a TypeScript parser class from an already-parsed {@link GrammarAST}.
+ *
+ * This is the second half of {@link generateParser}, for callers that obtain the AST
+ * some other way — for example by parsing the grammar with a parser that rdp-gen itself
+ * generated. `options.format` and `options.caseSensitiveStrings` only affect how source
+ * text is parsed, so they are ignored here.
+ *
+ * @param ast - The grammar to generate a parser for.
+ * @param options - Generator configuration.
+ * @returns A TypeScript source string ready to write to a `.ts` file.
+ * @throws {RDParserException} If the grammar is left-recursive.
+ */
+export function generateParserFromAST(ast: GrammarAST, options: GeneratorOptions = {}): string {
+  const parserName = options.parserName ?? 'GeneratedParser'
+  const treeName = options.treeName ?? 'ParseTree'
+  const observable = options.observable ?? false
+  const traversal = options.traversal
   detectLeftRecursion(ast)
 
   const baseClass = observable ? 'ObservableRDParser' : 'ScannerlessRDParser'
@@ -400,6 +416,32 @@ function emitCapture(
     case 'terminal': {
       const lines: string[] = []
       const chars = body.value.split('')
+      if (body.caseInsensitive === true) {
+        // Match each ASCII letter in either case and capture the text actually read.
+        const hex = (c: number): string => `0x${c.toString(16).padStart(2, '0')}`
+        const vars: string[] = []
+        for (const ch of chars) {
+          const code = ch.charCodeAt(0)
+          const lower = ch.toLowerCase().charCodeAt(0)
+          const upper = ch.toUpperCase().charCodeAt(0)
+          const isLetter = lower !== upper && code < 0x80
+          const v = namedVar('ch')
+          vars.push(v)
+          lines.push(
+            isLetter
+              ? `const ${v} = this.readChar(${hex(lower)}) ?? this.readChar(${hex(upper)}) // ${JSON.stringify(ch)}`
+              : `const ${v} = this.readChar(${hex(code)}) // ${JSON.stringify(ch)}`,
+          )
+          lines.push(`if (${v} === null) ${failStmt}`)
+        }
+        if (vars.length === 1) {
+          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+          return { lines, varName: vars[0]! }
+        }
+        const lit = namedVar('lit')
+        lines.push(`const ${lit} = ${vars.join(' + ')}`)
+        return { lines, varName: lit }
+      }
       if (chars.length === 1) {
         // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
         const ch = chars[0]!

@@ -13,7 +13,8 @@
  * - `*A`, `1*A`, `2*4A`, `*4A` repetition → `zeroOrMore`, `oneOrMore`, or `repetition` nodes
  * - `[A]` optional → `optional` node
  * - `%xNN`, `%dNN`, `%bNN` character values and `%xNN-MM` ranges → `charValue` nodes
- * - `"string"` case-insensitive string literals
+ * - `"string"` case-insensitive string literals → `terminal` nodes with `caseInsensitive: true`
+ *   (when they contain a letter); the grammar's original case is kept in `value`
  * - `%s"string"` case-sensitive string literals (RFC 7405)
  * - Core rule references (ALPHA, DIGIT, etc.) → `coreRule` nodes
  */
@@ -284,9 +285,11 @@ export class ABNFParser extends GrammarParser {
     const start = this.getPosition()
     while (!this.atEnd() && this.peek() !== 0x22) this.advance()
     if (this.atEnd()) this.error('Unterminated string literal')
-    let value = this.decodeSlice(start, this.getPosition())
+    const value = this.decodeSlice(start, this.getPosition())
     this.advance()
-    if (!caseSensitive && !this.#caseSensitiveStrings) value = value.toLowerCase()
+    if (!caseSensitive && !this.#caseSensitiveStrings && /[A-Za-z]/.test(value)) {
+      return { kind: 'terminal', value, caseInsensitive: true }
+    }
     return { kind: 'terminal', value }
   }
 

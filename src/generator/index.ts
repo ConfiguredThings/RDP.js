@@ -26,7 +26,7 @@
  * ```
  */
 
-export { generateParser } from './codegen.js'
+export { generateParser, generateParserFromAST } from './codegen.js'
 export type { GeneratorOptions } from './codegen.js'
 export {
   generateScaffold,
