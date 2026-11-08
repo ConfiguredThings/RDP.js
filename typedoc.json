@@ -6,7 +6,7 @@
   "name": "@configuredthings/rdp.js",
   "includeVersion": true,
   "readme": "README.md",
-  "tsconfig": "tsconfig.json",
+  "tsconfig": "tsconfig.typedoc.json",
   "customCss": "docs-site/typedoc-theme/custom.css",
   "plugin": ["./docs-site/typedoc-plugin-header.mjs"],
   "navigationLinks": {

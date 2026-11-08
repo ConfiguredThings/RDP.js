@@ -59,10 +59,10 @@ pre-filled. Add `--observable` to extend `ObservableRDParser` instead.
 
 ```bash
 # Generate a strictly-typed parser class from an EBNF grammar
-rdp-gen date.ebnf --parser-name DateParser --output src/DateParser.ts
+rdp-gen date.ebnf --parser-name DateParser > src/DateParser.ts
 
 # Generate a usage scaffold for the pattern that fits your use case
-rdp-gen date.ebnf --parser-name DateParser --traversal interpreter --facade --output src/date.ts
+rdp-gen date.ebnf --parser-name DateParser --traversal interpreter --facade > src/date.ts
 ```
 
 Scaffold flags emit a one-time typed starter file — imports, entry points, stubs, and error handling

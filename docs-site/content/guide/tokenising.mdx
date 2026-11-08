@@ -187,7 +187,7 @@ The scannerless parser reads characters directly and produces a typed `ParseTree
 ## Generating the scaffold
 
 ```bash
-rdp-gen grammar.ebnf --parser-name MyParser --lexer span --output src/MyLexer.ts
+rdp-gen grammar.ebnf --parser-name MyParser --lexer span > src/MyLexer.ts
 ```
 
 The generated file contains:
@@ -208,8 +208,8 @@ for each production rule and change the `static parse()` return type from
 
 ```bash
 # Compare the scannerless generated parser with the span-lexer scaffold:
-rdp-gen grammar.ebnf --parser-name MyParser --output src/MyParser.ts
-rdp-gen grammar.ebnf --parser-name MyParser --lexer span --output src/MyLexer.ts
+rdp-gen grammar.ebnf --parser-name MyParser > src/MyParser.ts
+rdp-gen grammar.ebnf --parser-name MyParser --lexer span > src/MyLexer.ts
 ```
 
 For grammars where character-class rules are not a significant factor, the

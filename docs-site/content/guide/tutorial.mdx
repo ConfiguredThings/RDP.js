@@ -45,7 +45,7 @@ Valid inputs: `42`, `3 + 4`, `3 + 4 * 2`, `(3 + 4) * 2`, `10 / (2 + 3) - 1`
 ### Step 2 — generate the parser
 
 ```bash
-rdp-gen arithmetic.ebnf --parser-name ArithmeticParser --output ArithmeticParser.ts
+rdp-gen arithmetic.ebnf --parser-name ArithmeticParser > ArithmeticParser.ts
 ```
 
 `rdp-gen` emits a fully typed TypeScript class with a `static parse(input: string)` entry
@@ -80,7 +80,7 @@ Pass `--observable` to generate a parser that extends `ObservableRDParser`:
 rdp-gen arithmetic.ebnf \
   --parser-name ArithmeticParser \
   --observable \
-  --output ArithmeticParser.ts
+  > ArithmeticParser.ts
 ```
 
 Pass a `DebugObserver` as the second argument to `static parse` to print an indented call tree:

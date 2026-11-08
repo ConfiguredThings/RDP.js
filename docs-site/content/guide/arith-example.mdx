@@ -10,7 +10,7 @@ import { arithEBNF } from '@configuredthings/rdp.js/grammars'
 ## Worked Example: Arithmetic Parser
 
 This page walks through the full lifecycle of a grammar — from `.ebnf` source
-file to generated parser to four scaffold patterns — using a simple arithmetic
+file to generated parser to the scaffold patterns — using a simple arithmetic
 expression grammar as the running example.
 
 All files live in [`examples/arith/`](https://github.com/ConfiguredThings/RDP.js/tree/main/examples/arith/)
@@ -43,11 +43,16 @@ The railroad diagrams for the three top-level rules:
 rdp-gen src/grammars/arith.ebnf \
   --parser-name ArithParser \
   --tree-name ArithTree \
-  --output examples/arith/ArithParser.ts
+  > examples/arith/ArithParser.ts
 ```
 
 `childNodes(node: ArithTree): ArithTree[]` is always emitted alongside the parser
 and types — no extra flag is needed.
+
+`rdp-gen` writes to stdout unless you pass `--outdir`, so the commands in this
+guide redirect it into the file they name. With `--outdir src/` it would choose
+the filename itself (`ArithParser.ts`, `arith-facade.ts`, …); see the
+[CLI reference](/docs/cli/).
 
 The generated [`ArithParser`](/api/classes/ArithExample.ArithParser.html) has a
 `static parse(input: string): ExprNode` entry point and one private method per
@@ -70,72 +75,103 @@ narrow on `kind` with `switch` or `if` and TypeScript tracks the exact shape.
 
 ---
 
-### Step 2 — choose a scaffold
+### Step 2 — choose a traversal or scaffold
 
-Run the scaffolds once, then edit the output freely — they are **not** regenerated.
+There are two kinds of output beyond the plain parser.
 
-| Scaffold | Command | Best for |
-|----------|---------|----------|
-| interpreter | `--traversal interpreter` | Recursive evaluation / interpretation |
+**Traversal stubs** are added to the parser itself. Because they follow the grammar
+mechanically, the file can still be regenerated when the grammar changes.
+
+| Flags | Adds to the parser |
+|-------|--------------------|
+| `--traversal interpreter` | `eval{Rule}()` stubs and a `static evaluate()` entry point |
+| `--traversal tree-walker` | a `walk()` utility and a commented `Visitor` template |
+
+**Scaffolds** are separate, one-time starter files. Run them once, then edit the output
+freely — they are **not** regenerated.
+
+| Scaffold | Flags | Best for |
+|----------|-------|----------|
 | facade | `--traversal interpreter --facade` | Hiding the parser behind a clean domain API |
 | pipeline | `--traversal tree-walker --pipeline` | Multi-stage parse → validate → transform |
-| tree-walker | `--traversal tree-walker` | Tree traversal with per-node visitor dispatch |
 | transformer | `--transformer` | Exhaustive conversion to a typed IR or output |
 | json-transformer | `--transformer json` | Two-way translation to/from JSON |
 
 ---
 
-### Scaffold: interpreter
+### Traversal: interpreter
 
 ```bash
 rdp-gen src/grammars/arith.ebnf \
   --parser-name ArithParser \
+  --tree-name ArithTree \
   --traversal interpreter \
-  --output examples/arith/arith-evaluator.ts
+  --outdir src/
 ```
 
-Emits one `eval{Rule}()` function per grammar rule, an `evaluate()` entry point,
-and wraps [`RDParserException`](/api/classes/RDParser.RDParserException.html) in
-a plain `Error`. Replace `unknown` with your concrete return types, then fill in
-the function bodies.
+This is still a parser, not a separate file: it writes `src/ArithParser.ts` with
+evaluation stubs built in (the `examples/arith/ArithParser.ts` used in this guide is the
+plain parser from Step 1). The class implements `InterpreterMixin<ArithTree, unknown>`
+and gains a `static evaluate()` entry point plus one `eval{Rule}()` stub per rule, each
+with a comment listing the fields of its node. Replace `unknown` with your concrete
+return type, then fill in the bodies.
 
 ```ts
-// arith-evaluator.ts — edit freely; not regenerated
+export class ArithParser extends ScannerlessRDParser implements InterpreterMixin<ArithTree, unknown> {
+  // … parser methods …
 
-import {
-  ArithParser,
-  type ExprNode,
-  type TermNode,
-  type FactorNode,
-  type NumberNode,
-  type DigitNode,
-  type WspNode,
-} from './ArithParser.js'
-import { RDParserException } from '@configuredthings/rdp.js'
-
-export function evaluate(input: string): unknown {
-  try {
-    return evalExpr(ArithParser.parse(input))
-  } catch (e) {
-    if (e instanceof RDParserException) throw new Error(`parse error: "${input}"`)
-    throw e
+  /** Parse `input` and evaluate it to a result. */
+  static evaluate(input: string): unknown {
+    const bytes = new TextEncoder().encode(input)
+    const parser = new ArithParser(new DataView(bytes.buffer))
+    return parser.evalExpr(parser.parse())
   }
-}
 
-function evalExpr(node: ExprNode): unknown {
-  throw new Error('not implemented')
-}
+  evalExpr(node: ExprNode): unknown {
+    // node.wsp0: WspNode
+    // node.term: TermNode
+    // …
+    throw new Error('not implemented')
+  }
 
-function evalTerm(node: TermNode): unknown {
-  throw new Error('not implemented')
+  // … one eval method per rule …
 }
-
-// … one function per rule …
 ```
 
-Full file: [`arith-evaluator.ts`](/api/functions/ArithExample.evaluate.html)
+---
 
+### Traversal: tree-walker
 
+```bash
+rdp-gen src/grammars/arith.ebnf \
+  --parser-name ArithParser \
+  --tree-name ArithTree \
+  --traversal tree-walker \
+  --outdir src/
+```
+
+Like the interpreter, this adds to the generated parser (`src/ArithParser.ts`) rather
+than producing a separate file. It exports a `walk(root, fn)` utility built on
+`childNodes` (always present) and a commented `Visitor` template covering every rule
+in the grammar:
+
+```ts
+export function walk(root: ArithTree, fn: (node: ArithTree) => void): void {
+  fn(root)
+  for (const child of childNodes(root)) walk(child, fn)
+}
+
+// Add handlers for the node kinds you care about.
+// Use Required<Visitor<ArithTree>> to enforce that every kind is handled.
+//
+// const visitor: Visitor<ArithTree> = {
+//   'Expr': (node) => { /* ... */ },
+//   'Term': (node) => { /* ... */ },
+//   // … one handler per rule …
+// }
+//
+// walk(ArithParser.parse(input), (node) => visit(node, visitor))
+```
 
 ---
 
@@ -146,7 +182,7 @@ rdp-gen src/grammars/arith.ebnf \
   --parser-name ArithParser \
   --traversal interpreter \
   --facade \
-  --output examples/arith/arith-facade.ts
+  > examples/arith/arith-facade.ts
 ```
 
 Emits a domain `ArithResult` class with a `static from(tree)` factory, a typed
@@ -212,7 +248,7 @@ rdp-gen src/grammars/arith.ebnf \
   --parser-name ArithParser \
   --traversal tree-walker \
   --pipeline \
-  --output examples/arith/arith-pipeline.ts
+  > examples/arith/arith-pipeline.ts
 ```
 
 Emits three exported stage functions — `parse()` (throws on syntax error), `validate()`
@@ -235,49 +271,6 @@ export function loadArith(input: string): ArithResult { … }
 ```
 
 Full file: [`arith-pipeline.ts`](/api/functions/ArithExample.parse.html)
-
----
-
-### Scaffold: tree-walker
-
-```bash
-rdp-gen src/grammars/arith.ebnf \
-  --parser-name ArithParser \
-  --tree-name ArithTree \
-  --traversal tree-walker \
-  --output examples/arith/arith-walker.ts
-```
-
-Emits a `walk(root, fn)` utility using `childNodes` (always present) and a
-commented `Visitor` stub covering every rule in the grammar:
-
-```ts
-// arith-walker.ts — edit freely; not regenerated
-
-import { ArithParser, childNodes, type ArithTree } from './ArithParser.js'
-import { visit, type Visitor } from '@configuredthings/rdp.js'
-
-export function walk(root: ArithTree, fn: (node: ArithTree) => void): void {
-  fn(root)
-  for (const child of childNodes(root)) walk(child, fn)
-}
-
-// Add handlers for the node kinds you care about.
-// Use Required<Visitor<ArithTree>> to enforce that every kind is handled.
-//
-// const visitor: Visitor<ArithTree> = {
-//   'Expr':   (node) => { /* ... */ },
-//   'Term':   (node) => { /* ... */ },
-//   'Factor': (node) => { /* ... */ },
-//   'Number': (node) => { /* ... */ },
-//   'Digit':  (node) => { /* ... */ },
-//   'wsp':    (node) => { /* ... */ },
-// }
-//
-// walk(ArithParser.parse(input), (node) => visit(node, visitor))
-```
-
-Full file: [`arith-walker.ts`](/api/functions/ArithExample.walk.html)
 
 ---
 
@@ -309,7 +302,7 @@ rdp-gen src/grammars/arith.ebnf \
   --parser-name ArithParser \
   --tree-name ArithTree \
   --transformer \
-  --output examples/arith/arith-to-ir.ts
+  > examples/arith/arith-to-ir.ts
 ```
 
 Filling in the stubs (leaf nodes `Digit` and `wsp` are consumed by their parents and
@@ -374,7 +367,7 @@ rdp-gen src/grammars/arith.ebnf \
   --parser-name ArithParser \
   --tree-name ArithTree \
   --transformer json \
-  --output examples/arith/arith-json.ts
+  > examples/arith/arith-json.ts
 ```
 
 The `json-transformer` scaffold generates stubs for both directions. The `irToJSONAST`
@@ -421,8 +414,8 @@ toJSON('2 + 3 * 4')  // → '{"op":"+","left":2,"right":{"op":"*","left":3,"righ
 
 The [grammar AST](/api/variables/ArithExample.arithAST.html) is the intermediate
 representation produced by `EBNFParser.parse(arithEBNF)`. It is a
-[`GrammarAST`](/api/interfaces/Generator.GrammarAST.html) — an array of
-[`ProductionRule`](/api/interfaces/Generator.ProductionRule.html) objects, one per
+[`GrammarAST`](/api/types/Generator.GrammarAST.html) — an array of
+[`ProductionRule`](/api/types/Generator.ProductionRule.html) objects, one per
 rule in the grammar.
 
 ```ts
