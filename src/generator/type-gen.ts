@@ -284,6 +284,37 @@ function childrenStmtsFor(
     }
 
     case 'alternation': {
+      // Repetition alternatives (`A | {B}`) are typed `T | U[]`, so they must be told apart
+      // from the other branches with Array.isArray before anything is accessed.
+      const repetitions = body.items.filter(isRepetition)
+      if (repetitions.some(bodyContainsNonTerminal)) {
+        const others = body.items.filter((i) => !isRepetition(i))
+        const v = `_f${nextVar()}`
+        const elem = `_item${nextVar()}`
+        const loopBody = unionOf(repetitions.filter(bodyContainsNonTerminal).map((r) => r.item))
+        const loop = childrenStmtsFor(elem, loopBody, treeName, nextVar)
+        const rest = others.some(bodyContainsNonTerminal)
+          ? childrenStmtsFor(v, unionOf(others), treeName, nextVar)
+          : []
+        if (loop.length === 0 && rest.length === 0) return []
+        const loopBlock = [`for (const ${elem} of ${v}) {`, ...loop.map((l) => `  ${l}`), `}`]
+        const result = [`const ${v} = ${access}`]
+        if (rest.length === 0) {
+          result.push(`if (Array.isArray(${v})) {`, ...loopBlock.map((l) => `  ${l}`), `}`)
+        } else if (loop.length === 0) {
+          result.push(`if (!Array.isArray(${v})) {`, ...rest.map((l) => `  ${l}`), `}`)
+        } else {
+          result.push(
+            `if (Array.isArray(${v})) {`,
+            ...loopBlock.map((l) => `  ${l}`),
+            `} else {`,
+            ...rest.map((l) => `  ${l}`),
+            `}`,
+          )
+        }
+        return result
+      }
+
       const hasNodes = body.items.some((i) => i.kind === 'nonTerminal')
       const sequenceBranches = body.items.filter(
         (i): i is Extract<RuleBody, { kind: 'sequence' }> =>
@@ -306,7 +337,10 @@ function childrenStmtsFor(
       // At least one anonymous sequence branch — need a local variable for narrowing.
       const v = `_f${nextVar()}`
       const result: string[] = [`const ${v} = ${access}`]
-      const objectBody = altObjectStmts(v, hasNodes, sequenceBranches, treeName, nextVar)
+      const allSequences = body.items.filter(
+        (i): i is Extract<RuleBody, { kind: 'sequence' }> => i.kind === 'sequence',
+      )
+      const objectBody = altObjectStmts(v, hasNodes, allSequences, treeName, nextVar)
 
       if (hasStrings) {
         result.push(`if (typeof ${v} !== 'string') {`, ...objectBody.map((l) => `  ${l}`), `}`)
@@ -329,7 +363,7 @@ function altObjectStmts(
   treeName: string,
   nextVar: () => number,
 ): string[] {
-  if (sequenceBranches.length === 0) {
+  if (!sequenceBranches.some(bodyContainsNonTerminal)) {
     // Only ParseTree node branches.
     return [`children.push(${v})`]
   }
@@ -348,9 +382,15 @@ function altObjectStmts(
 }
 
 /**
- * Generate statements that extract ParseTree children from one or more anonymous
- * sequence branches of an alternation. Multiple branches are distinguished by
- * checking for the presence of their first non-terminal field.
+ * Generate statements that extract ParseTree children from the anonymous sequence
+ * branches of an alternation (`seqItems` holds every sequence branch, including any
+ * with no non-terminals, since those still need to be told apart from the rest).
+ *
+ * Branches are distinguished at runtime only by which fields their objects have, so:
+ * - branches with identical field names are indistinguishable and are emitted once;
+ * - each remaining branch is selected with `'field' in v`, using a field that no other
+ *   branch has, so TypeScript can narrow the union and no branch is matched by another;
+ * - the last branch becomes the `else` (the branches are exhaustive by construction).
  */
 function seqExtractionStmts(
   v: string,
@@ -358,39 +398,80 @@ function seqExtractionStmts(
   treeName: string,
   nextVar: () => number,
 ): string[] {
-  if (seqItems.length === 1) {
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    const seq = seqItems[0]!
-    const fieldNames = inferFieldNames(seq.items)
-    const result: string[] = []
+  type Branch = { names: string[]; stmts: string[] }
+  const bySignature = new Map<string, Branch>()
+  for (const seq of seqItems) {
+    const names = inferFieldNames(seq.items)
+    const signature = [...names].sort().join(',')
+    if (bySignature.has(signature)) continue
+    const stmts: string[] = []
     for (const [i, item] of seq.items.entries()) {
       if (bodyContainsNonTerminal(item)) {
         // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-        result.push(...childrenStmtsFor(`${v}.${fieldNames[i]!}`, item, treeName, nextVar))
+        stmts.push(...childrenStmtsFor(`${v}.${names[i]!}`, item, treeName, nextVar))
       }
+    }
+    bySignature.set(signature, { names, stmts })
+  }
+  const branches = [...bySignature.values()]
+  if (branches.length === 1) return branches[0]?.stmts ?? []
+
+  // A field is a usable discriminator if exactly one branch has it.
+  const fieldCounts = new Map<string, number>()
+  for (const b of branches)
+    for (const n of b.names) fieldCounts.set(n, (fieldCounts.get(n) ?? 0) + 1)
+  const keyOf = (b: Branch): string | undefined => b.names.find((n) => fieldCounts.get(n) === 1)
+
+  const withStmts = branches.filter((b) => b.stmts.length > 0)
+  const withoutStmts = branches.filter((b) => b.stmts.length === 0)
+  if (withStmts.length === 0) return []
+
+  const result: string[] = []
+
+  if (withoutStmts.length > 0) {
+    // Some branches contribute nothing, so none of the others can be the unguarded `else`:
+    // guard each one, by its own unique field or else by the absence of an empty branch's.
+    const emptyKey = withoutStmts.map(keyOf).find((k) => k !== undefined)
+    for (const b of withStmts) {
+      const key = keyOf(b)
+      const test =
+        key !== undefined
+          ? `'${key}' in ${v}`
+          : emptyKey !== undefined
+            ? `!('${emptyKey}' in ${v})`
+            : `'${b.names[0]}' in ${v}`
+      result.push(`if (${test}) {`, ...b.stmts.map((l) => `  ${l}`), `}`)
     }
     return result
   }
 
-  // Multiple sequence branches: discriminate by first non-terminal field name.
-  const result: string[] = []
-  for (const seq of seqItems) {
-    const fieldNames = inferFieldNames(seq.items)
-    const discIdx = seq.items.findIndex(bodyContainsNonTerminal)
-    if (discIdx === -1) continue
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    const discField = fieldNames[discIdx]!
-    result.push(`if ('${discField}' in ${v}) {`)
-    for (const [i, item] of seq.items.entries()) {
-      if (bodyContainsNonTerminal(item)) {
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-        const stmts = childrenStmtsFor(`${v}.${fieldNames[i]!}`, item, treeName, nextVar)
-        for (const stmt of stmts) result.push(`  ${stmt}`)
-      }
-    }
-    result.push(`}`)
+  // Branches with a discriminator first; one without (if any) goes last, as the `else`.
+  const keyed = withStmts.filter((b) => keyOf(b) !== undefined)
+  const keyless = withStmts.filter((b) => keyOf(b) === undefined)
+  const ordered = [...keyed, ...keyless.slice(0, 1)]
+
+  for (const [i, b] of ordered.entries()) {
+    const isLast = i === ordered.length - 1 && keyless.length <= 1
+    const head =
+      isLast && ordered.length > 1
+        ? '} else {'
+        : `${i === 0 ? '' : '} else '}if ('${keyOf(b) ?? b.names[0]}' in ${v}) {`
+    result.push(head, ...b.stmts.map((l) => `  ${l}`))
   }
+  result.push('}')
   return result
+}
+
+function isRepetition(
+  body: RuleBody,
+): body is Extract<RuleBody, { kind: 'zeroOrMore' | 'oneOrMore' | 'repetition' }> {
+  return body.kind === 'zeroOrMore' || body.kind === 'oneOrMore' || body.kind === 'repetition'
+}
+
+/** Combine bodies into one alternation (or return the sole body unchanged). */
+function unionOf(items: RuleBody[]): RuleBody {
+  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+  return items.length === 1 ? items[0]! : { kind: 'alternation', items }
 }
 
 function camelCase(name: string): string {
