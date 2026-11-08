@@ -9,25 +9,29 @@ describe('ABNFParser.parse', () => {
     expect(ast.rules[0]?.body).toMatchObject({ kind: 'terminal', value: 'hello' })
   })
 
-  it('normalises case-insensitive quoted strings to lowercase', () => {
+  it('keeps the written case and flags case-insensitive quoted strings', () => {
     const ast = ABNFParser.parse(`rule = "Hello"`)
-    expect(ast.rules[0]?.body).toMatchObject({ kind: 'terminal', value: 'hello' })
+    expect(ast.rules[0]?.body).toEqual({ kind: 'terminal', value: 'Hello', caseInsensitive: true })
   })
 
-  it('preserves case for %s"..." case-sensitive strings', () => {
+  it('does not flag quoted strings that contain no letters', () => {
+    const ast = ABNFParser.parse(`rule = "1-2"`)
+    expect(ast.rules[0]?.body).toEqual({ kind: 'terminal', value: '1-2' })
+  })
+
+  it('does not flag %s"..." case-sensitive strings', () => {
     const ast = ABNFParser.parse(`rule = %s"Hello"`)
-    expect(ast.rules[0]?.body).toMatchObject({ kind: 'terminal', value: 'Hello' })
+    expect(ast.rules[0]?.body).toEqual({ kind: 'terminal', value: 'Hello' })
   })
 
-  it('preserves case for %i"..." (RFC 7405 explicit case-insensitive)', () => {
-    // %i is case-insensitive — same behaviour as plain quotes: lowercase
+  it('flags %i"..." (RFC 7405 explicit case-insensitive) like a plain quoted string', () => {
     const ast = ABNFParser.parse(`rule = %i"Hello"`)
-    expect(ast.rules[0]?.body).toMatchObject({ kind: 'terminal', value: 'hello' })
+    expect(ast.rules[0]?.body).toEqual({ kind: 'terminal', value: 'Hello', caseInsensitive: true })
   })
 
-  it('preserves case when caseSensitiveStrings option is true', () => {
+  it('does not flag strings when the caseSensitiveStrings option is true', () => {
     const ast = ABNFParser.parse(`rule = "Hello"`, { caseSensitiveStrings: true })
-    expect(ast.rules[0]?.body).toMatchObject({ kind: 'terminal', value: 'Hello' })
+    expect(ast.rules[0]?.body).toEqual({ kind: 'terminal', value: 'Hello' })
   })
 
   it('parses alternation with /', () => {

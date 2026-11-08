@@ -22,12 +22,10 @@ Rep      = ("1" "*") / "*"
 Element  = Group / OptGrp / CharVal / Str / RuleName
 Group    = "(" *ws Body *ws ")"
 OptGrp   = "[" *ws Body *ws "]"
-; Prefix letters use %x codes rather than "x" / "X": quoted strings in ABNF are
-; case-insensitive, but generated parsers currently match them case-sensitively.
 CharVal  = "%" ( HexVal / DecVal / BinVal )
-HexVal   = ( %x78 / %x58 ) HexCpnt ( "-" HexCpnt / *( "." HexCpnt ) )
-DecVal   = ( %x64 / %x44 ) DecCpnt ( "-" DecCpnt / *( "." DecCpnt ) )
-BinVal   = ( %x62 / %x42 ) BinCpnt ( "-" BinCpnt / *( "." BinCpnt ) )
+HexVal   = "x" HexCpnt ( "-" HexCpnt / *( "." HexCpnt ) )
+DecVal   = "d" DecCpnt ( "-" DecCpnt / *( "." DecCpnt ) )
+BinVal   = "b" BinCpnt ( "-" BinCpnt / *( "." BinCpnt ) )
 HexCpnt  = HEXDIG *HEXDIG
 DecCpnt  = DIGIT *DIGIT
 BinCpnt  = BIT *BIT

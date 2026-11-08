@@ -1326,7 +1326,8 @@ function punctName(ch: string): string {
 function collectTerminals(body: RuleBody, out: Set<string>): void {
   switch (body.kind) {
     case 'terminal':
-      out.add(body.value)
+      // Case-insensitive (ABNF) strings were historically lowercased; keep the lexer tables stable.
+      out.add(body.caseInsensitive === true ? body.value.toLowerCase() : body.value)
       break
     case 'sequence':
     case 'alternation':

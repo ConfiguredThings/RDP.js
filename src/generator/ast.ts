@@ -42,8 +42,13 @@ export type RuleBody =
   /** A reference to another named production rule. */
   | { kind: 'nonTerminal'; name: string }
 
-  /** A literal string to match byte-for-byte. */
-  | { kind: 'terminal'; value: string }
+  /**
+   * A literal string. Matched byte-for-byte unless `caseInsensitive` is set, in which case
+   * ASCII letters match in either case (RFC 5234 §2.3: ABNF quoted strings are case-insensitive).
+   * `value` keeps the case written in the grammar. `caseInsensitive` is only set for strings
+   * that contain at least one ASCII letter.
+   */
+  | { kind: 'terminal'; value: string; caseInsensitive?: true }
 
   // ── ISO EBNF-specific ────────────────────────────────────────────────────
 

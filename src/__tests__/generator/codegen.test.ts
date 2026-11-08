@@ -514,3 +514,62 @@ describe('generateParser — traversal: tree-walker', () => {
     expect(typeCheck(src)).toEqual([])
   })
 })
+
+// ── ABNF case-insensitive strings (RFC 5234 §2.3) ────────────────────────────
+
+describe('generated ABNF parser — case-insensitive quoted strings', () => {
+  type P = { parse(s: string): unknown }
+  let Method!: P
+  let Mixed!: P
+  let Sensitive!: P
+
+  beforeAll(async () => {
+    const compile = async (
+      grammar: string,
+      name: string,
+      caseSensitiveStrings = false,
+    ): Promise<P> => {
+      const source = generateParser(grammar, {
+        format: 'abnf',
+        parserName: name,
+        caseSensitiveStrings,
+      })
+      return (await compileAndImport(source))[name] as P
+    }
+    Method = await compile('method = "GET" / "POST"', 'MethodParser')
+    Mixed = await compile('tag = "x" "-" "Ab1"', 'MixedParser')
+    Sensitive = await compile('word = "Hello"', 'SensitiveParser', true)
+  })
+
+  it('accepts a keyword in the case written in the grammar', () => {
+    expect(() => Method.parse('GET')).not.toThrow()
+    expect(() => Method.parse('POST')).not.toThrow()
+  })
+
+  it('accepts the keyword in lower and mixed case', () => {
+    expect(() => Method.parse('get')).not.toThrow()
+    expect(() => Method.parse('Post')).not.toThrow()
+    expect(() => Method.parse('pOsT')).not.toThrow()
+  })
+
+  it('still rejects other words', () => {
+    expect(() => Method.parse('PUT')).toThrow()
+    expect(() => Method.parse('GE')).toThrow()
+  })
+
+  it('matches single letters and multi-letter strings with digits and punctuation', () => {
+    expect(() => Mixed.parse('x-Ab1')).not.toThrow()
+    expect(() => Mixed.parse('X-aB1')).not.toThrow()
+    expect(() => Mixed.parse('X-AB2')).toThrow()
+  })
+
+  it('captures the text actually read, not the grammar spelling', () => {
+    expect(nav(Method.parse('post'), 'item0')).toBe('post')
+    expect(nav(Method.parse('GET'), 'item0')).toBe('GET')
+  })
+
+  it('stays case-sensitive when caseSensitiveStrings is set', () => {
+    expect(() => Sensitive.parse('Hello')).not.toThrow()
+    expect(() => Sensitive.parse('hello')).toThrow()
+  })
+})

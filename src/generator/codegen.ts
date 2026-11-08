@@ -400,6 +400,32 @@ function emitCapture(
     case 'terminal': {
       const lines: string[] = []
       const chars = body.value.split('')
+      if (body.caseInsensitive === true) {
+        // Match each ASCII letter in either case and capture the text actually read.
+        const hex = (c: number): string => `0x${c.toString(16).padStart(2, '0')}`
+        const vars: string[] = []
+        for (const ch of chars) {
+          const code = ch.charCodeAt(0)
+          const lower = ch.toLowerCase().charCodeAt(0)
+          const upper = ch.toUpperCase().charCodeAt(0)
+          const isLetter = lower !== upper && code < 0x80
+          const v = namedVar('ch')
+          vars.push(v)
+          lines.push(
+            isLetter
+              ? `const ${v} = this.readChar(${hex(lower)}) ?? this.readChar(${hex(upper)}) // ${JSON.stringify(ch)}`
+              : `const ${v} = this.readChar(${hex(code)}) // ${JSON.stringify(ch)}`,
+          )
+          lines.push(`if (${v} === null) ${failStmt}`)
+        }
+        if (vars.length === 1) {
+          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+          return { lines, varName: vars[0]! }
+        }
+        const lit = namedVar('lit')
+        lines.push(`const ${lit} = ${vars.join(' + ')}`)
+        return { lines, varName: lit }
+      }
       if (chars.length === 1) {
         // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
         const ch = chars[0]!
