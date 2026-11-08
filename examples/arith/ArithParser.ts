@@ -7,9 +7,9 @@
 //   noUncheckedIndexedAccess: true
 //   moduleResolution: node16 or bundler
 
-import { RDParser } from '@configuredthings/rdp.js'
+import { ScannerlessRDParser } from '@configuredthings/rdp.js'
 
-export class ArithParser extends RDParser {
+export class ArithParser extends ScannerlessRDParser {
 
   private constructor(source: DataView) {
     super(source)
