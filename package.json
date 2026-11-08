@@ -1,6 +1,6 @@
 {
   "name": "@configuredthings/rdp.js",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "A minimal typed base class for writing recursive descent parsers in TypeScript, with a focus on ease of use and extensibility. Also includes a CLI tool that can generate parsers from EBNF or ABNF grammars, with support for generating scaffolding for tree walkers, interpreters, facades, semantic validation piepelines, and two-way transformers",
   "author": {
     "name": "Configured Things Ltd.",
@@ -71,7 +71,8 @@
     "generate:grammars": "node scripts/generate-grammar-index.mjs",
     "pretest": "npm run generate:grammars",
     "prebuild": "npm run clean && npm run generate:grammars",
-    "build": "tsc -p tsconfig.cjs.json && tsc -p tsconfig.esm.json",
+    "build": "tsc -p tsconfig.cjs.json && node scripts/write-cjs-package.mjs && tsc -p tsconfig.esm.json",
+    "smoke:exports": "node scripts/smoke-test-exports.mjs",
     "test": "node --experimental-vm-modules --no-warnings=ExperimentalWarning node_modules/.bin/jest",
     "lint": "eslint src docs-site/src",
     "docs": "npm --prefix docs-site run render-header && npx --prefix docs-site typedoc",

@@ -87,7 +87,10 @@ jobs:
 
       - name: Build library
         run: npm run build
-      
+
+      - name: Smoke-test package entry points
+        run: npm run smoke:exports
+
       - name: Test
         run: npm test
 

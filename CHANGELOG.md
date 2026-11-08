@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-08
+
 ### Added
 
 - `generateParserFromAST(ast, options)`, exported from `@configuredthings/rdp.js/generator`: the second half of `generateParser`, for callers that already have a `GrammarAST` — for example one built from the parse tree of a parser rdp-gen itself generated.
@@ -21,6 +23,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The CommonJS build could not be loaded: the package is `"type": "module"` and `dist/cjs` had no `package.json` marking it CommonJS, so Node treated those files as ES modules and every `require('@configuredthings/rdp.js')` (and each subpath) failed with `Cannot find module './...js'`. This affected every previous release. The build now writes `dist/cjs/package.json` (`{ "type": "commonjs" }`), and `npm run smoke:exports` loads every entry point in the `exports` map with both `import` and `require`; it runs in PR checks and before publishing.
+- The published package included test helpers (`dist/esm/__testUtils__/`): `tsconfig.esm.json` did not exclude `src/__testUtils__/**` as `tsconfig.cjs.json` already did. One of them imports `typescript`, which is only a dev dependency. They are now excluded from the ESM build.
 - Documentation: 21 `rdp-gen ... --output <file>` examples in the README and the tutorial, using-parsers, debugging, tokenising, bootstrapping and arith-example guides failed with `ERR_PARSE_ARGS_UNKNOWN_OPTION`, because `--output` was removed from the CLI (it writes to stdout unless `--outdir` is given). They now redirect stdout (`> file`). All 37 `rdp-gen` commands in the docs were run against the CLI to check. `arith-example.mdx` also described standalone `arith-evaluator.ts` / `arith-walker.ts` scaffolds that the generator no longer emits (`--traversal` alone adds stubs to the parser itself); those sections now describe what the flags really produce. `bootstrapping.mdx` documents the meta-grammars' comment and continuation-line support and the closed loop in `bootstrap-loop.test.ts`.
 - Documentation site: the `ArithExample` API pages were never generated (TypeDoc listed `examples/arith/index.ts` as an entry point, but `tsconfig.json` does not include `examples/`), so every `/api/.../ArithExample.*` link was dead. TypeDoc now uses `tsconfig.typedoc.json`, which includes the examples. Two links to `Generator.GrammarAST` / `ProductionRule` used `/api/interfaces/` where these are type aliases, one pointed at a nonexistent `Grammar_AST` module, and one `#transformer-parsetree-t-and-transform` anchor in `cli.mdx` had extra hyphens; they now resolve. A crawl of the built site finds no broken internal links or fragments.
 - `ebnf-meta.ebnf`, `abnf-meta.ebnf` and `ebnf-meta.abnf` accepted a grammar with no rules (`Grammar = {Rule}` / `*Rule`), which `EBNFParser` and `ABNFParser` reject; they now require at least one. The header comments in `ebnf-meta.ebnf` and `abnf-meta.*` no longer contain non-ASCII characters or a literal `(* ... *)`, neither of which the meta-grammars could parse inside a comment.
@@ -153,7 +157,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bootstrapping meta-grammars: EBNF and ABNF formats each described in both EBNF and ABNF (`src/grammars/`)
 - Left-recursion detection at grammar compilation time
 
-[Unreleased]: https://github.com/ConfiguredThings/RDP.js/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/ConfiguredThings/RDP.js/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/ConfiguredThings/RDP.js/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/ConfiguredThings/RDP.js/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/ConfiguredThings/RDP.js/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/ConfiguredThings/RDP.js/compare/v0.4.0...v0.5.0
