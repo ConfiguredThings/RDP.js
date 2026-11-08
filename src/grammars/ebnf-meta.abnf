@@ -4,12 +4,12 @@
 ; Rules are terminated by ";".  Concatenation uses ",".  Alternation uses "|".
 ; Grouping uses "()", optional uses "[]", repetition uses "{}".
 ; n * P is counted repetition.  A - B is the exception operator.
-; Block comments (* ... *) are not covered by this meta-grammar.
+; Block comments (parenthesis-asterisk delimiters) are covered but do not nest.
 ;
-; Test input: any valid ISO EBNF grammar (without (* *) comments), e.g.:
+; Test input: any valid ISO EBNF grammar, e.g.:
 ;   Greeting = 'hello' | 'world';
 
-Grammar  = *Rule *ws
+Grammar  = 1*Rule *ws
 Rule     = *ws Name *ws "=" *ws Body *ws ";"
 Body     = Sequence *(*ws "|" *ws Sequence)
 Sequence = Term *(*ws "," *ws Term)
@@ -28,4 +28,8 @@ EscSeq   = %x5C (%x6E / %x74 / %x72 / %x5C / %x27 / %x22)
 Name     = NameF *NameR
 NameF    = ALPHA / "_"
 NameR    = ALPHA / DIGIT / "_" / "-"
-ws       = %x20 / %x09 / %x0A / %x0D
+ws       = %x20 / %x09 / %x0A / %x0D / comment
+comment  = "(*" *nostar *( stars nostarparen *nostar ) stars ")"
+stars    = 1*"*"
+nostar   = %x09 / %x0A / %x0D / %x20-29 / %x2B-7E
+nostarparen = %x09 / %x0A / %x0D / %x20-28 / %x2B-7E
