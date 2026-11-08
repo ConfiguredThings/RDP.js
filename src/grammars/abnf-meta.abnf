@@ -2,8 +2,9 @@
 ; Describes the subset of ABNF syntax used by rdp-gen.
 ;
 ; Covers: rule definitions (=), alternation (/), double-quoted string literals,
-; zero-or-more (*X), one-or-more (1*X), optional groups ([...]), and the
-; DQUOTE core rule.  Does not cover char-range rules (%xNN-NN) or prose-val.
+; zero-or-more (*X), one-or-more (1*X), optional groups ([...]), the DQUOTE core
+; rule, and character-value rules (%xNN, %xNN-MM, %xNN.MM, %dNN, %bNN and their
+; range/concatenation forms).  Does not cover prose-val.
 ;
 ; Because this grammar is itself written in ABNF and describes ABNF, it
 ; demonstrates the "self-describing" property of the grammar format.
@@ -18,9 +19,18 @@ Body     = Sequence *(hsp "/" hsp Sequence)
 Sequence = Term *(hsp Term)
 Term     = Rep Element / Element
 Rep      = ("1" "*") / "*"
-Element  = Group / OptGrp / Str / RuleName
+Element  = Group / OptGrp / CharVal / Str / RuleName
 Group    = "(" *ws Body *ws ")"
 OptGrp   = "[" *ws Body *ws "]"
+; Prefix letters use %x codes rather than "x" / "X": quoted strings in ABNF are
+; case-insensitive, but generated parsers currently match them case-sensitively.
+CharVal  = "%" ( HexVal / DecVal / BinVal )
+HexVal   = ( %x78 / %x58 ) HexCpnt ( "-" HexCpnt / *( "." HexCpnt ) )
+DecVal   = ( %x64 / %x44 ) DecCpnt ( "-" DecCpnt / *( "." DecCpnt ) )
+BinVal   = ( %x62 / %x42 ) BinCpnt ( "-" BinCpnt / *( "." BinCpnt ) )
+HexCpnt  = HEXDIG *HEXDIG
+DecCpnt  = DIGIT *DIGIT
+BinCpnt  = BIT *BIT
 Str      = DQUOTE *DChar DQUOTE
 DChar    = %x20-21 / %x23-7E
 RuleName = ALPHA *( ALPHA / DIGIT / "-" / "_" )
