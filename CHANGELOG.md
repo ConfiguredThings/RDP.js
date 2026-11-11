@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Bump `eslint` from 10.10.0 to 10.14.0
+
 ## [0.8.0] - 2026-11-08
 
 ### Added
